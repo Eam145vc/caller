@@ -14,17 +14,24 @@ module.exports = (connection) => {
     let leadId = null;
 
     // Connect to OpenAI Realtime API
+    // Connect to OpenAI Realtime API
     const url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01";
-    openAiWs = new WebSocket(url, {
-        headers: {
-            "Authorization": "Bearer " + process.env.OPENAI_API_KEY,
-            "OpenAI-Beta": "realtime=v1"
-        }
-    });
+    console.log(`Connecting to OpenAI Realtime API...`);
+
+    try {
+        openAiWs = new WebSocket(url, {
+            headers: {
+                "Authorization": "Bearer " + process.env.OPENAI_API_KEY,
+                "OpenAI-Beta": "realtime=v1"
+            }
+        });
+    } catch (wsError) {
+        console.error("Failed to construct OpenAI WebSocket:", wsError);
+    }
 
     // OpenAI Event Handling
     openAiWs.on('open', () => {
-        console.log('Connected to OpenAI Realtime API');
+        console.log('✅ Connected to OpenAI Realtime API');
 
         // Initialize session
         const sessionUpdate = {
@@ -33,7 +40,7 @@ module.exports = (connection) => {
                 turn_detection: { type: 'server_vad' },
                 input_audio_format: 'g711_ulaw',
                 output_audio_format: 'g711_ulaw',
-                voice: 'shimmer', // 'alloy', 'echo', 'shimmer'
+                voice: 'shimmer',
                 instructions: SYSTEM_MESSAGE,
                 modalities: ["text", "audio"],
                 temperature: 0.6,
@@ -42,6 +49,15 @@ module.exports = (connection) => {
             }
         };
         openAiWs.send(JSON.stringify(sessionUpdate));
+        console.log('Session update sent to OpenAI');
+    });
+
+    openAiWs.on('error', (error) => {
+        console.error("❌ OpenAI WebSocket Error:", error);
+    });
+
+    openAiWs.on('close', (code, reason) => {
+        console.warn(`⚠️ OpenAI WebSocket Closed. Code: ${code}, Reason: ${reason}`);
     });
 
     openAiWs.on('message', (data) => {
