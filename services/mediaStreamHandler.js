@@ -74,12 +74,24 @@ module.exports = (connection) => {
         // Handle Audio Output
         if (response.type === 'response.audio.delta' && response.delta) {
             const audioData = response.delta;
+            // console.log(`🔊 Piped ${audioData.length} bytes from OpenAI to Twilio`); // Too noisy for prod, good for debug
+
             const twilioPayload = {
                 event: 'media',
                 streamSid: streamSid,
                 media: { payload: audioData }
             };
             twilioWs.send(JSON.stringify(twilioPayload));
+        }
+
+        // Log when response is done to check if AI actually generated something
+        if (response.type === 'response.done') {
+            console.log("✅ OpenAI response generation finished.");
+        }
+
+        // Log errors from OpenAI
+        if (response.type === 'error') {
+            console.error("❌ OpenAI API Error:", response.error);
         }
 
         // Handle Function Calling
