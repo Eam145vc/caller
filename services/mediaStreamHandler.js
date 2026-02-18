@@ -21,16 +21,12 @@ module.exports = (connection) => {
     }
 
     // Connect to ElevenLabs Conversational AI WebSocket
-    // Note: We use the signed URL pattern or just API key in header if allowed
-    const url = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}`;
+    // Use query parameter for auth to ensure it passes through
+    const url = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${ELEVENLABS_AGENT_ID}&xi-api-key=${process.env.ELEVENLABS_API_KEY}`;
     console.log('Connecting to ElevenLabs Conversational AI...');
 
     try {
-        elevenLabsWs = new WebSocket(url, {
-            headers: {
-                "xi-api-key": process.env.ELEVENLABS_API_KEY
-            }
-        });
+        elevenLabsWs = new WebSocket(url);
     } catch (err) {
         console.error("Failed to connect to ElevenLabs:", err);
         return;
@@ -138,7 +134,7 @@ module.exports = (connection) => {
     });
 
     elevenLabsWs.on('close', (code, reason) => {
-        console.warn(`⚠️ ElevenLabs WebSocket Closed. Code: ${code}`);
+        console.warn(`⚠️ ElevenLabs WebSocket Closed. Code: ${code}, Reason: ${reason ? reason.toString() : 'No reason provided'}`);
     });
 
     // Twilio Event Handling
