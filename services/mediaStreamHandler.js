@@ -70,6 +70,13 @@ module.exports = (connection) => {
     openAiWs.on('message', (data) => {
         const response = JSON.parse(data);
 
+        // Log the event type to debug
+        console.log(`📩 OpenAI Event: ${response.type}`);
+
+        if (response.type === 'error') {
+            console.error("❌ ERROR DETAILS:", JSON.stringify(response));
+        }
+
         // Detect Text Output (to see if it's ignoring audio)
         if (response.type === 'response.text.delta') {
             console.log("📝 Received text delta:", response.delta);
