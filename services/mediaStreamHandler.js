@@ -55,8 +55,6 @@ module.exports = (connection) => {
         setTimeout(() => {
             if (openAiWs.readyState === WebSocket.OPEN) {
                 // Determine greeting based on leadId or default
-                const greeting = "Hola, buenos días. ¿Hablo con el encargado del negocio?";
-
                 const initialConversationItem = {
                     type: "conversation.item.create",
                     item: {
@@ -65,7 +63,7 @@ module.exports = (connection) => {
                         content: [
                             {
                                 type: "input_text",
-                                text: "Saluda al cliente amablemente y preséntate como Sofía de WebBoost Colombia. Pregunta si hablas con el dueño."
+                                text: "Saluda ya mismo. Di: 'Hola, buenos días, ¿hablo con el encargado?'"
                             }
                         ]
                     }
@@ -74,7 +72,7 @@ module.exports = (connection) => {
                 openAiWs.send(JSON.stringify({ type: "response.create" }));
                 console.log('Triggered initial AI response with context');
             }
-        }, 1000); // Wait 1s for connection to stabilize
+        }, 2000); // Wait 2s for connection to stabilize fully
     });
 
     openAiWs.on('error', (error) => {
@@ -91,12 +89,14 @@ module.exports = (connection) => {
         // Handle Audio Output
         if (response.type === 'response.audio.delta' && response.delta) {
             const audioData = response.delta;
-            // console.log(`🔊 Piped ${audioData.length} bytes from OpenAI to Twilio`); // Too noisy for prod, good for debug
+            // OpenAI sends raw PCM_16, Twilio expects base64
+            const base64Audio = Buffer.from(audioData).toString('base64');
+            // console.log(`🔊 Piped ${base64Audio.length} bytes from OpenAI to Twilio`); // Too noisy for prod, good for debug
 
             const twilioPayload = {
                 event: 'media',
                 streamSid: streamSid,
-                media: { payload: audioData }
+                media: { payload: base64Audio }
             };
             twilioWs.send(JSON.stringify(twilioPayload));
         }
