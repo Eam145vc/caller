@@ -73,6 +73,7 @@ module.exports = (connection) => {
         // Handle Audio Output - OpenAI sends delta as base64 already when using g711_ulaw
         if (response.type === 'response.audio.delta' && response.delta) {
             if (streamSid) {
+                // console.log(`🔊 Receiving audio delta (${response.delta.length} chars)`); 
                 const twilioPayload = {
                     event: 'media',
                     streamSid: streamSid,
