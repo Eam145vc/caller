@@ -50,6 +50,14 @@ module.exports = (connection) => {
         };
         openAiWs.send(JSON.stringify(sessionUpdate));
         console.log('Session update sent to OpenAI');
+
+        // Trigger AI to speak first
+        setTimeout(() => {
+            if (openAiWs.readyState === WebSocket.OPEN) {
+                openAiWs.send(JSON.stringify({ type: "response.create" }));
+                console.log('Triggered initial AI response');
+            }
+        }, 500);
     });
 
     openAiWs.on('error', (error) => {
