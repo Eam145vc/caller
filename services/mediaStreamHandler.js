@@ -51,13 +51,30 @@ module.exports = (connection) => {
         openAiWs.send(JSON.stringify(sessionUpdate));
         console.log('Session update sent to OpenAI');
 
-        // Trigger AI to speak first
+        // Trigger AI to speak first with a specific instruction
         setTimeout(() => {
             if (openAiWs.readyState === WebSocket.OPEN) {
+                // Determine greeting based on leadId or default
+                const greeting = "Hola, buenos días. ¿Hablo con el encargado del negocio?";
+
+                const initialConversationItem = {
+                    type: "conversation.item.create",
+                    item: {
+                        type: "message",
+                        role: "user",
+                        content: [
+                            {
+                                type: "input_text",
+                                text: "Saluda al cliente amablemente y preséntate como Sofía de WebBoost Colombia. Pregunta si hablas con el dueño."
+                            }
+                        ]
+                    }
+                };
+                openAiWs.send(JSON.stringify(initialConversationItem));
                 openAiWs.send(JSON.stringify({ type: "response.create" }));
-                console.log('Triggered initial AI response');
+                console.log('Triggered initial AI response with context');
             }
-        }, 500);
+        }, 1000); // Wait 1s for connection to stabilize
     });
 
     openAiWs.on('error', (error) => {
