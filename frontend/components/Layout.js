@@ -29,6 +29,9 @@ export default function Layout({ children }) {
                     <Link href="/calls" className={`nav-item ${isActive('/calls')}`}>
                         Call History
                     </Link>
+                    <Link href="/test" className={`nav-item ${isActive('/test')}`} style={{ color: '#fbbf24' }}>
+                        🧪 Test AI Voice
+                    </Link>
                     <Link href="/settings" className={`nav-item ${isActive('/settings')}`}>
                         Settings
                     </Link>

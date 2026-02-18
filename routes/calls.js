@@ -1,10 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { initiateCall } = require('../services/callEngine');
+const twilio = require('twilio');
 const db = require('../database/db');
+const { initiateCall } = require('../services/callEngine');
 const VoiceResponse = require('twilio').twiml.VoiceResponse;
 
-// Initiate a call
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const client = twilio(accountSid, authToken);
+
+// Initiate a call to a lead
 router.post('/calls/start', async (req, res) => {
     const { leadId } = req.body;
 
@@ -20,8 +25,44 @@ router.post('/calls/start', async (req, res) => {
     }
 });
 
+// START NEW TEST ENDPOINT
+// Initiate a test call to a manual number
+router.post('/calls/test', async (req, res) => {
+    const { phoneNumber } = req.body;
+
+    if (!phoneNumber) {
+        return res.status(400).json({ error: "Missing phoneNumber" });
+    }
+
+    const publicUrl = process.env.PUBLIC_URL; // Using ngrok or Railway URL
+    if (!publicUrl) {
+        return res.status(500).json({ error: "PUBLIC_URL is not configured" });
+    }
+
+    try {
+        // Create a temporary "lead" in memory concept or just pass ID 0 to indicate test
+        // But the webhook needs to know. Let's redirect to the same voice webhook 
+        // but pass a flag or a dummy ID.
+
+        console.log(`Initiating TEST call to ${phoneNumber}...`);
+
+        const call = await client.calls.create({
+            url: `${publicUrl}/api/twilio/voice?leadId=test`, // leadId=test signals it's a test
+            to: phoneNumber,
+            from: process.env.TWILIO_PHONE_NUMBER
+        });
+
+        console.log(`Test call initiated. SID: ${call.sid}`);
+        res.json({ success: true, callSid: call.sid });
+
+    } catch (error) {
+        console.error("Test Call Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+// END NEW TEST ENDPOINT
+
 // Twilio Voice Webhook (TwiML)
-// This is called by Twilio when the call is answered
 router.post('/twilio/voice', (req, res) => {
     const leadId = req.query.leadId;
     const response = new VoiceResponse();
@@ -34,7 +75,7 @@ router.post('/twilio/voice', (req, res) => {
     // Pass custom parameters to the stream
     stream.parameter({
         name: 'leadId',
-        value: leadId
+        value: leadId || 'unknown'
     });
 
     res.type('text/xml');
