@@ -9,7 +9,8 @@ export default function Leads() {
 
     const fetchLeads = async () => {
         try {
-            const res = await fetch('http://localhost:3000/api/leads');
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+            const res = await fetch(`${apiUrl}/api/leads`);
             const data = await res.json();
             setLeads(data.leads || []);
         } catch (err) {
@@ -25,7 +26,8 @@ export default function Leads() {
         e.preventDefault();
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:3000/api/scrape', {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+            const res = await fetch(`${apiUrl}/api/scrape`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ city, businessType, maxResults: 20 })
@@ -43,7 +45,8 @@ export default function Leads() {
     const startCall = async (leadId) => {
         if (!confirm('Start call with this lead?')) return;
         try {
-            const res = await fetch('http://localhost:3000/api/calls/start', {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+            const res = await fetch(`${apiUrl}/api/calls/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ leadId })
