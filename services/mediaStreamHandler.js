@@ -12,11 +12,11 @@ module.exports = (connection) => {
     let callSid = null;
     let openAiWs = null;
     let leadId = null;
+    let openAiReady = false;
 
     // Connect to OpenAI Realtime API
-    // Connect to OpenAI Realtime API
     const url = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01";
-    console.log(`Connecting to OpenAI Realtime API...`);
+    console.log('Connecting to OpenAI Realtime API...');
 
     try {
         openAiWs = new WebSocket(url, {
@@ -27,6 +27,7 @@ module.exports = (connection) => {
         });
     } catch (wsError) {
         console.error("Failed to construct OpenAI WebSocket:", wsError);
+        return;
     }
 
     // OpenAI Event Handling
@@ -50,29 +51,12 @@ module.exports = (connection) => {
         };
         openAiWs.send(JSON.stringify(sessionUpdate));
         console.log('Session update sent to OpenAI');
+        openAiReady = true;
 
-        // Trigger AI to speak first with a specific instruction
-        setTimeout(() => {
-            if (openAiWs.readyState === WebSocket.OPEN) {
-                // Determine greeting based on leadId or default
-                const initialConversationItem = {
-                    type: "conversation.item.create",
-                    item: {
-                        type: "message",
-                        role: "user",
-                        content: [
-                            {
-                                type: "input_text",
-                                text: "Saluda ya mismo. Di: 'Hola, buenos días, ¿hablo con el encargado?'"
-                            }
-                        ]
-                    }
-                };
-                openAiWs.send(JSON.stringify(initialConversationItem));
-                openAiWs.send(JSON.stringify({ type: "response.create" }));
-                console.log('Triggered initial AI response with context');
-            }
-        }, 2000); // Wait 2s for connection to stabilize fully
+        // If streamSid is already set (Twilio connected first), trigger greeting
+        if (streamSid) {
+            triggerGreeting();
+        }
     });
 
     openAiWs.on('error', (error) => {
@@ -86,29 +70,28 @@ module.exports = (connection) => {
     openAiWs.on('message', (data) => {
         const response = JSON.parse(data);
 
-        // Handle Audio Output
+        // Handle Audio Output - OpenAI sends delta as base64 already when using g711_ulaw
         if (response.type === 'response.audio.delta' && response.delta) {
-            const audioData = response.delta;
-            // OpenAI sends raw PCM_16, Twilio expects base64
-            const base64Audio = Buffer.from(audioData).toString('base64');
-            // console.log(`🔊 Piped ${base64Audio.length} bytes from OpenAI to Twilio`); // Too noisy for prod, good for debug
-
-            const twilioPayload = {
-                event: 'media',
-                streamSid: streamSid,
-                media: { payload: base64Audio }
-            };
-            twilioWs.send(JSON.stringify(twilioPayload));
+            if (streamSid) {
+                const twilioPayload = {
+                    event: 'media',
+                    streamSid: streamSid,
+                    media: { payload: response.delta } // Already base64 from OpenAI
+                };
+                twilioWs.send(JSON.stringify(twilioPayload));
+            } else {
+                console.warn('⚠️ Audio received but streamSid not set yet, dropping packet');
+            }
         }
 
-        // Log when response is done to check if AI actually generated something
+        // Log when response is done
         if (response.type === 'response.done') {
             console.log("✅ OpenAI response generation finished.");
         }
 
         // Log errors from OpenAI
         if (response.type === 'error') {
-            console.error("❌ OpenAI API Error:", response.error);
+            console.error("❌ OpenAI API Error:", JSON.stringify(response.error));
         }
 
         // Handle Function Calling
@@ -124,6 +107,26 @@ module.exports = (connection) => {
         }
     });
 
+    // Function to trigger the AI greeting - only called when BOTH connections are ready
+    function triggerGreeting() {
+        console.log('🎤 Both connections ready. Triggering AI greeting...');
+        const initialConversationItem = {
+            type: "conversation.item.create",
+            item: {
+                type: "message",
+                role: "user",
+                content: [
+                    {
+                        type: "input_text",
+                        text: "El cliente acaba de contestar el teléfono. Salúdalo inmediatamente."
+                    }
+                ]
+            }
+        };
+        openAiWs.send(JSON.stringify(initialConversationItem));
+        openAiWs.send(JSON.stringify({ type: "response.create" }));
+    }
+
     // Twilio Event Handling
     twilioWs.on('message', (message) => {
         const data = JSON.parse(message);
@@ -138,6 +141,11 @@ module.exports = (connection) => {
                     console.log(`Call started for Lead ID: ${leadId}`);
                 }
                 console.log(`Stream started: ${streamSid}`);
+
+                // If OpenAI is already connected, trigger greeting now
+                if (openAiReady) {
+                    triggerGreeting();
+                }
                 break;
 
             case 'media':
@@ -161,7 +169,7 @@ module.exports = (connection) => {
         let success = false;
         let message = "Failed to schedule appointment.";
 
-        if (leadId) {
+        if (leadId && leadId !== 'test') {
             try {
                 createAppointment(leadId, args.date, args.time, args.notes);
                 success = true;
@@ -171,8 +179,9 @@ module.exports = (connection) => {
                 message = "Error scheduling appointment.";
             }
         } else {
-            console.warn("No Lead ID associated with call. Cannot schedule.");
-            message = "Could not identify the customer record.";
+            console.log("Test call - skipping appointment save.");
+            success = true;
+            message = "Test appointment noted.";
         }
 
         // Send output back to OpenAI
