@@ -74,16 +74,16 @@ async function scrapeBusinesses(city, businessType, maxResults = 20) {
                     const exists = checkExists.get(lead.name, lead.city);
                     if (!exists) {
                         try {
-                            // Only save if it has a phone number (can't call without it)
-                            if (lead.phone) {
+                            // Only save if it has a phone number AND DOES NOT HAVE A WEBSITE
+                            if (lead.phone && !lead.has_website) {
                                 insert.run({
                                     name: lead.name,
                                     phone: lead.phone,
                                     address: lead.address,
                                     city: lead.city,
                                     business_type: lead.business_type,
-                                    has_website: lead.has_website ? 1 : 0, // SQLite keeps booleans as 1/0
-                                    website: lead.website
+                                    has_website: 0,
+                                    website: null
                                 });
                                 savedCount++;
                             }
