@@ -3,7 +3,7 @@ const { createAppointment } = require('./appointmentScheduler');
 const db = require('../database/db');
 
 // ELEVENLABS CONFIGURATION
-const ELEVENLABS_AGENT_ID = "7201khsj2mbneaytqs6q2q78d39g"; // Extracted from your link
+const ELEVENLABS_AGENT_ID = "agent_7201khsj2mbneaytqs6q2q78d39g"; // Added agent_ prefix
 // Make sure to add ELEVENLABS_API_KEY to your .env file!
 
 module.exports = (connection) => {
