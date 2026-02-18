@@ -123,6 +123,8 @@ module.exports = (connection) => {
     // Function to trigger the AI greeting - only called when BOTH connections are ready
     function triggerGreeting() {
         console.log('🎤 Both connections ready. Triggering AI greeting...');
+
+        // Append a "user" message that acts as a system instruction to force the AI to speak
         const initialConversationItem = {
             type: "conversation.item.create",
             item: {
@@ -131,19 +133,15 @@ module.exports = (connection) => {
                 content: [
                     {
                         type: "input_text",
-                        text: "El cliente acaba de contestar el teléfono. Salúdalo inmediatamente."
+                        text: "Ignora todo lo anterior. DI HOLA AHORA MISMO. Preséntate como Sofía de WebBoost."
                     }
                 ]
             }
         };
         openAiWs.send(JSON.stringify(initialConversationItem));
-        openAiWs.send(JSON.stringify({
-            type: "response.create",
-            response: {
-                modalities: ["text", "audio"],
-                instructions: "Greet the user warmly in Spanish. Say 'Hola, buenos días'."
-            }
-        }));
+
+        // Trigger generation
+        openAiWs.send(JSON.stringify({ type: "response.create" }));
     }
 
     // Twilio Event Handling
