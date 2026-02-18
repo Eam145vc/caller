@@ -99,7 +99,15 @@ module.exports = (connection) => {
 
         // Log when response is done
         if (response.type === 'response.done') {
-            console.log("✅ OpenAI response generation finished.");
+            console.log("✅ OpenAI response done.");
+            console.log("Status:", response.response.status);
+            if (response.response.status !== 'completed') {
+                console.error("Failure Details:", JSON.stringify(response.response.status_details));
+            }
+            // Check usage
+            if (response.response.usage) {
+                console.log("Usage:", JSON.stringify(response.response.usage));
+            }
         }
 
         // Log errors from OpenAI
@@ -124,24 +132,14 @@ module.exports = (connection) => {
     function triggerGreeting() {
         console.log('🎤 Both connections ready. Triggering AI greeting...');
 
-        // Append a "user" message that acts as a system instruction to force the AI to speak
-        const initialConversationItem = {
-            type: "conversation.item.create",
-            item: {
-                type: "message",
-                role: "user",
-                content: [
-                    {
-                        type: "input_text",
-                        text: "Ignora todo lo anterior. DI HOLA AHORA MISMO. Preséntate como Sofía de WebBoost."
-                    }
-                ]
+        // Trigger generation with explicit instructions
+        openAiWs.send(JSON.stringify({
+            type: "response.create",
+            response: {
+                modalities: ["audio", "text"],
+                instructions: "Saluda al usuario diciendo: 'Hola, buenos días. ¿Hablo con el encargado del negocio?'"
             }
-        };
-        openAiWs.send(JSON.stringify(initialConversationItem));
-
-        // Trigger generation
-        openAiWs.send(JSON.stringify({ type: "response.create" }));
+        }));
     }
 
     // Twilio Event Handling
