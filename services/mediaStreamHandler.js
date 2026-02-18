@@ -70,10 +70,15 @@ module.exports = (connection) => {
     openAiWs.on('message', (data) => {
         const response = JSON.parse(data);
 
+        // Detect Text Output (to see if it's ignoring audio)
+        if (response.type === 'response.text.delta') {
+            console.log("📝 Received text delta:", response.delta);
+        }
+
         // Handle Audio Output - OpenAI sends delta as base64 already when using g711_ulaw
         if (response.type === 'response.audio.delta' && response.delta) {
             if (streamSid) {
-                // console.log(`🔊 Receiving audio delta (${response.delta.length} chars)`); 
+                console.log(`🔊 Receiving audio delta (${response.delta.length} chars)`);
                 const twilioPayload = {
                     event: 'media',
                     streamSid: streamSid,
@@ -125,7 +130,13 @@ module.exports = (connection) => {
             }
         };
         openAiWs.send(JSON.stringify(initialConversationItem));
-        openAiWs.send(JSON.stringify({ type: "response.create" }));
+        openAiWs.send(JSON.stringify({
+            type: "response.create",
+            response: {
+                modalities: ["text", "audio"],
+                instructions: "Greet the user warmly in Spanish. Say 'Hola, buenos días'."
+            }
+        }));
     }
 
     // Twilio Event Handling
