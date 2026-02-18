@@ -17,9 +17,12 @@ async function initiateCall(leadId) {
         throw new Error("Lead has no phone number");
     }
 
-    const publicUrl = process.env.PUBLIC_URL;
+    let publicUrl = process.env.PUBLIC_URL;
     if (!publicUrl) {
         throw new Error("PUBLIC_URL is not set");
+    }
+    if (!publicUrl.startsWith('http')) {
+        publicUrl = `https://${publicUrl}`;
     }
 
     try {

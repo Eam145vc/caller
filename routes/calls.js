@@ -34,9 +34,12 @@ router.post('/calls/test', async (req, res) => {
         return res.status(400).json({ error: "Missing phoneNumber" });
     }
 
-    const publicUrl = process.env.PUBLIC_URL; // Using ngrok or Railway URL
+    let publicUrl = process.env.PUBLIC_URL; // Using ngrok or Railway URL
     if (!publicUrl) {
         return res.status(500).json({ error: "PUBLIC_URL is not configured" });
+    }
+    if (!publicUrl.startsWith('http')) {
+        publicUrl = `https://${publicUrl}`;
     }
 
     try {
