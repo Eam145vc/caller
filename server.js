@@ -7,6 +7,7 @@ const db = require('./database/db');
 const scraperRoutes = require('./routes/scraper');
 const callRoutes = require('./routes/calls');
 const appointmentRoutes = require('./routes/appointments');
+const settingsRoutes = require('./routes/settings');
 const mediaStreamHandler = require('./services/mediaStreamHandler');
 
 const app = express();
@@ -24,6 +25,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', scraperRoutes);
 app.use('/api', callRoutes);
 app.use('/api', appointmentRoutes);
+app.use('/api', settingsRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
