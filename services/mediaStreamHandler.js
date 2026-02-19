@@ -241,14 +241,50 @@ function processInputAudio(mulawBuffer) {
     return Buffer.from(pcm16.buffer);
 }
 
+const fs = require('fs');
+const path = require('path');
+
+// Load noise buffer (PCM 16-bit 16kHz for better mixing)
+const NOISE_PATH = path.join(__dirname, '../assets/office_noise.pcm');
+let noiseBuffer = null;
+let noiseIndex = 0;
+
+try {
+    if (fs.existsSync(NOISE_PATH)) {
+        noiseBuffer = fs.readFileSync(NOISE_PATH);
+    } else {
+        // Fallback: Generate simple 16kHz low-level chatter/noise
+        noiseBuffer = Buffer.alloc(16000 * 2 * 10); // 10 seconds
+        for (let i = 0; i < noiseBuffer.length; i += 2) {
+            const noise = (Math.random() * 2 - 1) * 300; // Low volume noise
+            noiseBuffer.writeInt16LE(Math.floor(noise), i);
+        }
+    }
+} catch (e) {
+    console.error("Error loading noise:", e);
+}
+
 function processOutputAudio(pcmBuffer, inputRate) {
     const samples = new Int16Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 2);
     const ratio = inputRate / 8000;
     const outputSamples = Math.floor(samples.length / ratio);
+
+    // Create Mu-Law buffer directly
     const mulaw = Buffer.alloc(outputSamples);
+
     for (let i = 0; i < outputSamples; i++) {
         const sourceIndex = Math.floor(i * ratio);
-        mulaw[i] = linearToMuLaw(samples[sourceIndex]);
+        let sample = samples[sourceIndex];
+
+        // Mix with background noise if available
+        if (noiseBuffer) {
+            const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
+            // Mix: Voice (90%) + Noise (10%)
+            sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.1));
+            noiseIndex++;
+        }
+
+        mulaw[i] = linearToMuLaw(sample);
     }
     return mulaw;
 }
