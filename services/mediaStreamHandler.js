@@ -115,7 +115,6 @@ module.exports = (connection) => {
     let liveSession = null;
     let leadId = null;
     let leadInfo = null;
-    let lastAIAudioTime = Date.now(); // Track when AI last spoke to know when to start comfort noise
 
     async function setupGemini() {
         try {
@@ -152,8 +151,6 @@ module.exports = (connection) => {
                                     const pcmData = Buffer.from(part.inlineData.data, 'base64');
                                     const rateMatch = mimeType.match(/rate=(\d+)/);
                                     const rate = rateMatch ? parseInt(rateMatch[1]) : 24000;
-
-                                    lastAIAudioTime = Date.now(); // Note that AI is currently speaking
 
                                     const mulawBuffer = processOutputAudio(pcmData, rate);
 
@@ -217,22 +214,6 @@ module.exports = (connection) => {
                         liveSession.sendRealtimeInput({
                             audio: { mimeType: "audio/pcm;rate=16000", data: pcm16k.toString('base64') }
                         });
-
-                        // 1-to-1 sync: if AI has not sent us audio recently (e.g. >500ms), 
-                        // reply with exactly the same size of comfort noise (which is usually ~20ms latency).
-                        // This uses Twilio's own media clock and cannot accumulate infinite buffer delays.
-                        if (Date.now() - lastAIAudioTime > 500) {
-                            // 160 bytes of mu-law = 160 samples. 160 samples * 2 bytes = 320 bytes PCM
-                            const silence = Buffer.alloc(mulawIn.length * 2);
-                            const mulawNoise = processOutputAudio(silence, 8000);
-
-                            const payload = {
-                                event: 'media',
-                                streamSid: streamSid,
-                                media: { payload: mulawNoise.toString('base64') }
-                            };
-                            twilioWs.send(JSON.stringify(payload));
-                        }
                     }
                     break;
 
@@ -267,13 +248,6 @@ function processInputAudio(mulawBuffer) {
     return Buffer.from(pcm16.buffer);
 }
 
-// --- NOISE SETUP ---
-const noiseBuffer = Buffer.alloc(16000 * 2); // Small 1-second noise buffer
-for (let i = 0; i < noiseBuffer.length; i += 2) {
-    const noise = (Math.random() * 2 - 1) * 350; // Soft white noise
-    noiseBuffer.writeInt16LE(noise, i);
-}
-
 function processOutputAudio(pcmBuffer, inputRate) {
     const samples = new Int16Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 2);
     const ratio = inputRate / 8000;
@@ -281,18 +255,9 @@ function processOutputAudio(pcmBuffer, inputRate) {
 
     const mulaw = Buffer.alloc(outputSamples);
 
-    // We don't bother tracking index globally because it's just white noise 
-    let noiseIdx = Math.floor(Math.random() * 1000);
-
     for (let i = 0; i < outputSamples; i++) {
         const sourceIndex = Math.floor(i * ratio);
         let sample = (sourceIndex < samples.length) ? samples[sourceIndex] : 0;
-
-        // Add comfort noise to the AI's audio specifically
-        const noiseSample = noiseBuffer.readInt16LE((noiseIdx * 2) % noiseBuffer.length);
-        sample = Math.min(32767, Math.max(-32768, sample + noiseSample));
-        noiseIdx++;
-
         mulaw[i] = linearToMuLaw(sample);
     }
     return mulaw;
