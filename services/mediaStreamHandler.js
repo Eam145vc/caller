@@ -275,7 +275,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Load noise buffer (PCM 16-bit 16kHz for better mixing)
-const NOISE_PATH = path.join(__dirname, '../assets/office_noise.pcm');
+const NOISE_PATH = path.join(__dirname, '../assets/office_noise.mulaw');
 let noiseBuffer = null;
 let noiseIndex = 0;
 
@@ -283,12 +283,7 @@ try {
     if (fs.existsSync(NOISE_PATH)) {
         noiseBuffer = fs.readFileSync(NOISE_PATH);
     } else {
-        // Fallback: Generate simple 16kHz low-level chatter/noise
-        noiseBuffer = Buffer.alloc(16000 * 2 * 10); // 10 seconds
-        for (let i = 0; i < noiseBuffer.length; i += 2) {
-            const noise = (Math.random() * 2 - 1) * 1200; // MUCH Louder noise for testing
-            noiseBuffer.writeInt16LE(Math.floor(noise), i);
-        }
+        console.error("Office noise file not found at:", NOISE_PATH);
     }
 } catch (e) {
     console.error("Error loading noise:", e);
