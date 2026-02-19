@@ -4,7 +4,7 @@ const db = require('../database/db');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = "AIzaSyAuDvX82Fpo6hdou2Izee7soS7uE7wNooo"; // Hardcoded for speed as requested
-const GEMINI_MODEL = "gemini-1.5-flash-latest"; // Try 1.5 Flash (Stable)
+const GEMINI_MODEL = "gemini-2.5-flash-native-audio-latest"; // Valid Native Audio Model
 
 // SYSTEM PROMPT FOR SOFIA (Colombian Persona)
 const SYSTEM_INSTRUCTION = `
@@ -41,8 +41,7 @@ module.exports = (connection) => {
 
     // Connect to Gemini Multimodal Live API
     // Doc: https://ai.google.dev/gemini-api/docs/multimodal-live
-    // Try v1beta endpoint if available, but BidiGenerateContent is predominantly alpha.
-    // Sticking to v1alpha but changing model first.
+    // Try v1alpha endpoint for Bidi which is required for native audio models
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
     console.log('Connecting to Gemini Multimodal Live API...');
 
@@ -57,16 +56,26 @@ module.exports = (connection) => {
     geminiWs.on('open', () => {
         console.log('✅ Connected to Gemini Live');
 
-        // Initial Setup Message - SIMPLIFIED TO DEBUG 1008
+        // Initial Setup Message - RE-ENABLING CONFIG WITH CORRECT MODEL
         const setupMessage = {
             setup: {
                 model: `models/${GEMINI_MODEL}`,
                 generationConfig: {
-                    responseModalities: ["AUDIO"]
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: {
+                                voiceName: "Aoede" // Female, expressive voice supported by model
+                            }
+                        }
+                    }
+                },
+                systemInstruction: {
+                    parts: [{ text: SYSTEM_INSTRUCTION }]
                 }
-                // Removed tools and voice config temporarily to isolate error
             }
         };
+        geminiWs.send(JSON.stringify(setupMessage));
         geminiWs.send(JSON.stringify(setupMessage));
 
         // Output initial greeting audio? 
