@@ -64,7 +64,7 @@ module.exports = (connection) => {
                     speechConfig: {
                         voiceConfig: {
                             prebuiltVoiceConfig: {
-                                voiceName: "Aoede" // Female, expressive voice
+                                voiceName: "Aoede"
                             }
                         }
                     }
