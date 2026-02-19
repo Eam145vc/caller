@@ -1,29 +1,52 @@
+require('dotenv').config();
 const https = require('https');
 
-const API_KEY = "AIzaSyAuDvX82Fpo6hdou2Izee7soS7uE7wNooo";
-const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`;
+const API_KEY = process.env.GEMINI_API_KEY;
+if (!API_KEY) {
+    console.error("❌ GEMINI_API_KEY not found in .env");
+    process.exit(1);
+}
 
-https.get(url, (res) => {
-    let data = '';
-    res.on('data', (chunk) => data += chunk);
-    res.on('end', () => {
-        try {
-            const response = JSON.parse(data);
-            if (response.models) {
-                console.log("✅ Available Models:");
-                response.models.forEach(m => {
-                    // Filter for models that might support audio/speech
-                    if (m.name.includes("flash") || m.name.includes("audio") || m.name.includes("exp")) {
-                        console.log(`- ${m.name} (Methods: ${m.supportedGenerationMethods})`);
+const checkApiVersion = (version) => {
+    return new Promise((resolve) => {
+        const url = `https://generativelanguage.googleapis.com/${version}/models?key=${API_KEY}`;
+        console.log(`\n🔍 Checking version: ${version}...`);
+
+        https.get(url, (res) => {
+            let data = '';
+            res.on('data', (chunk) => data += chunk);
+            res.on('end', () => {
+                try {
+                    const response = JSON.parse(data);
+                    if (response.models) {
+                        console.log(`✅ Models found in ${version}:`);
+                        response.models.forEach(m => {
+                            if (m.supportedGenerationMethods.includes('bidiGenerateContent')) {
+                                console.log(`⭐ [SUPPORTED] ${m.name}`);
+                            } else if (m.name.includes("2.0") || m.name.includes("exp")) {
+                                console.log(`  [Found] ${m.name}`);
+                            }
+                        });
+                    } else if (response.error) {
+                        console.error(`❌ Error in ${version}:`, response.error.message);
+                    } else {
+                        console.log(`ℹ️ No models returned for ${version}`);
                     }
-                });
-            } else {
-                console.error("❌ No models found or error:", response);
-            }
-        } catch (e) {
-            console.error("Error parsing response:", e);
-        }
+                    resolve();
+                } catch (e) {
+                    console.error(`❌ Error parsing ${version} response:`, e.message);
+                    resolve();
+                }
+            });
+        }).on('error', (e) => {
+            console.error(`❌ Request error for ${version}:`, e.message);
+            resolve();
+        });
     });
-}).on('error', (e) => {
-    console.error("Request error:", e);
-});
+};
+
+(async () => {
+    await checkApiVersion('v1alpha');
+    await checkApiVersion('v1beta');
+    console.log("\nDone.");
+})();
