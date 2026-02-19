@@ -116,6 +116,7 @@ module.exports = (connection) => {
     let leadId = null;
     let leadInfo = null;
     let noiseInterval = null;
+    let lastAIAudioTime = 0; // Tracks when AI last spoke to pause overlapping background noise intervals
 
     // Function to keep noise alive even when AI is silent
     function startBackgroundNoise() {
@@ -123,6 +124,10 @@ module.exports = (connection) => {
 
         noiseInterval = setInterval(() => {
             if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                // If the AI just spoke within the last 500ms, don't inject solitary noise packets 
+                // because it clashes with the live AI stream and causes Twilio to drop/chop audio.
+                if (Date.now() - lastAIAudioTime < 500) return;
+
                 // Generate 100ms of noise (8000 samples * 0.1s = 800 samples)
                 const silence = Buffer.alloc(1600); // 800 samples * 2 bytes (16-bit)
                 const mulawNoise = processOutputAudio(silence, 8000);
@@ -166,6 +171,10 @@ module.exports = (connection) => {
                                     const pcmData = Buffer.from(part.inlineData.data, 'base64');
                                     const rateMatch = mimeType.match(/rate=(\d+)/);
                                     const rate = rateMatch ? parseInt(rateMatch[1]) : 24000;
+
+                                    // Mark that the AI is currently speaking to pause solitary noise packets
+                                    lastAIAudioTime = Date.now();
+
                                     const mulawBuffer = processOutputAudio(pcmData, rate);
 
                                     const payload = {
@@ -269,7 +278,7 @@ function processInputAudio(mulawBuffer) {
 // Generate 10 seconds of soft white noise (comfort noise)
 const noiseBuffer = Buffer.alloc(16000 * 2 * 10);
 for (let i = 0; i < noiseBuffer.length; i += 2) {
-    const noise = (Math.random() * 2 - 1) * 350; // Soft volume white noise
+    const noise = (Math.random() * 2 - 1) * 80; // MUCH softer volume white noise (was 350)
     noiseBuffer.writeInt16LE(noise, i);
 }
 let noiseIndex = 0;
