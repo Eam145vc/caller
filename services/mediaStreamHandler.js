@@ -115,32 +115,7 @@ module.exports = (connection) => {
     let liveSession = null;
     let leadId = null;
     let leadInfo = null;
-    let noiseInterval = null;
-    let lastAIAudioTime = 0; // Tracks when AI last spoke to pause overlapping background noise intervals
-
-    // Function to keep noise alive even when AI is silent
-    function startBackgroundNoise() {
-        if (noiseInterval) clearInterval(noiseInterval);
-
-        noiseInterval = setInterval(() => {
-            if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
-                // If the AI just spoke within the last 500ms, don't inject solitary noise packets 
-                // because it clashes with the live AI stream and causes Twilio to drop/chop audio.
-                if (Date.now() - lastAIAudioTime < 500) return;
-
-                // Generate 100ms of noise (8000 samples * 0.1s = 800 samples)
-                const silence = Buffer.alloc(1600); // 800 samples * 2 bytes (16-bit)
-                const mulawNoise = processOutputAudio(silence, 8000);
-
-                const payload = {
-                    event: 'media',
-                    streamSid: streamSid,
-                    media: { payload: mulawNoise.toString('base64') }
-                };
-                twilioWs.send(JSON.stringify(payload));
-            }
-        }, 100); // Send every 100ms
-    }
+    let lastAIAudioTime = Date.now(); // Track when AI last spoke to know when to start comfort noise
 
     async function setupGemini() {
         try {
@@ -163,6 +138,12 @@ module.exports = (connection) => {
                         console.log('✅ Gemini SDK Connection Open');
                     },
                     onmessage: (message) => {
+                        if (message.serverContent && message.serverContent.interrupted) {
+                            console.log("⚠️ AI Interrupted - Clearing Twilio Queue");
+                            if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                                twilioWs.send(JSON.stringify({ event: 'clear', streamSid: streamSid }));
+                            }
+                        }
                         if (message.serverContent && message.serverContent.modelTurn) {
                             const parts = message.serverContent.modelTurn.parts;
                             for (const part of parts) {
@@ -172,8 +153,7 @@ module.exports = (connection) => {
                                     const rateMatch = mimeType.match(/rate=(\d+)/);
                                     const rate = rateMatch ? parseInt(rateMatch[1]) : 24000;
 
-                                    // Mark that the AI is currently speaking to pause solitary noise packets
-                                    lastAIAudioTime = Date.now();
+                                    lastAIAudioTime = Date.now(); // Note that AI is currently speaking
 
                                     const mulawBuffer = processOutputAudio(pcmData, rate);
 
@@ -227,7 +207,6 @@ module.exports = (connection) => {
                         }
                     }
 
-                    startBackgroundNoise();
                     setupGemini();
                     break;
 
@@ -238,12 +217,27 @@ module.exports = (connection) => {
                         liveSession.sendRealtimeInput({
                             audio: { mimeType: "audio/pcm;rate=16000", data: pcm16k.toString('base64') }
                         });
+
+                        // 1-to-1 sync: if AI has not sent us audio recently (e.g. >500ms), 
+                        // reply with exactly the same size of comfort noise (which is usually ~20ms latency).
+                        // This uses Twilio's own media clock and cannot accumulate infinite buffer delays.
+                        if (Date.now() - lastAIAudioTime > 500) {
+                            // 160 bytes of mu-law = 160 samples. 160 samples * 2 bytes = 320 bytes PCM
+                            const silence = Buffer.alloc(mulawIn.length * 2);
+                            const mulawNoise = processOutputAudio(silence, 8000);
+
+                            const payload = {
+                                event: 'media',
+                                streamSid: streamSid,
+                                media: { payload: mulawNoise.toString('base64') }
+                            };
+                            twilioWs.send(JSON.stringify(payload));
+                        }
                     }
                     break;
 
                 case 'stop':
                     console.log('Stream stopped');
-                    if (noiseInterval) clearInterval(noiseInterval);
                     break;
             }
         } catch (e) {
@@ -253,7 +247,6 @@ module.exports = (connection) => {
 
     twilioWs.on('close', () => {
         console.log('Twilio connection closed');
-        if (noiseInterval) clearInterval(noiseInterval);
     });
 };
 
@@ -275,13 +268,11 @@ function processInputAudio(mulawBuffer) {
 }
 
 // --- NOISE SETUP ---
-// Generate 10 seconds of soft white noise (comfort noise)
-const noiseBuffer = Buffer.alloc(16000 * 2 * 10);
+const noiseBuffer = Buffer.alloc(16000 * 2); // Small 1-second noise buffer
 for (let i = 0; i < noiseBuffer.length; i += 2) {
-    const noise = (Math.random() * 2 - 1) * 80; // MUCH softer volume white noise (was 350)
+    const noise = (Math.random() * 2 - 1) * 350; // Soft white noise
     noiseBuffer.writeInt16LE(noise, i);
 }
-let noiseIndex = 0;
 
 function processOutputAudio(pcmBuffer, inputRate) {
     const samples = new Int16Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 2);
@@ -290,14 +281,17 @@ function processOutputAudio(pcmBuffer, inputRate) {
 
     const mulaw = Buffer.alloc(outputSamples);
 
+    // We don't bother tracking index globally because it's just white noise 
+    let noiseIdx = Math.floor(Math.random() * 1000);
+
     for (let i = 0; i < outputSamples; i++) {
         const sourceIndex = Math.floor(i * ratio);
         let sample = (sourceIndex < samples.length) ? samples[sourceIndex] : 0;
 
-        // Add comfort noise
-        const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
+        // Add comfort noise to the AI's audio specifically
+        const noiseSample = noiseBuffer.readInt16LE((noiseIdx * 2) % noiseBuffer.length);
         sample = Math.min(32767, Math.max(-32768, sample + noiseSample));
-        noiseIndex++;
+        noiseIdx++;
 
         mulaw[i] = linearToMuLaw(sample);
     }
