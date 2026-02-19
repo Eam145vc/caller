@@ -4,7 +4,7 @@ const db = require('../database/db');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = "AIzaSyAuDvX82Fpo6hdou2Izee7soS7uE7wNooo"; // Hardcoded for speed as requested
-const GEMINI_MODEL = "gemini-2.0-flash-exp"; // Multimodal Live Model
+const GEMINI_MODEL = "gemini-1.5-flash-latest"; // Try 1.5 Flash (Stable)
 
 // SYSTEM PROMPT FOR SOFIA (Colombian Persona)
 const SYSTEM_INSTRUCTION = `
@@ -41,6 +41,8 @@ module.exports = (connection) => {
 
     // Connect to Gemini Multimodal Live API
     // Doc: https://ai.google.dev/gemini-api/docs/multimodal-live
+    // Try v1beta endpoint if available, but BidiGenerateContent is predominantly alpha.
+    // Sticking to v1alpha but changing model first.
     const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
     console.log('Connecting to Gemini Multimodal Live API...');
 
