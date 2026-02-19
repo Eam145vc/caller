@@ -166,8 +166,9 @@ module.exports = (connection) => {
             }
 
             // MIX MATH: AI + Noise
-            // We multiply noise by 0.8 (80%) so it is impossible to miss.
-            let mixed = aiSample + (noiseSample * 0.8);
+            // The office noise file is natively very quiet (max value ~3900 out of 32767).
+            // We multiply noise heavily (4x) to make it audible and slightly lower the AI (80%) to balance it.
+            let mixed = (aiSample * 0.8) + (noiseSample * 4.0);
             mixed = Math.min(32767, Math.max(-32768, mixed));
 
             mulaw[i] = linearToMuLaw(mixed);
