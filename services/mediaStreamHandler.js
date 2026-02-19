@@ -3,7 +3,7 @@ const WebSocket = require('ws');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-2.5-flash-native-audio-latest";
+const GEMINI_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
 
 // SYSTEM PROMPT FOR SOFIA
 const SYSTEM_INSTRUCTION = `
