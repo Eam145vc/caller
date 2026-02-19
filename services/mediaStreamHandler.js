@@ -98,7 +98,7 @@ module.exports = (connection) => {
                     responseModalities: ["AUDIO"],
                     systemInstruction: { parts: [{ text: promptText }] },
                     speechConfig: {
-                        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } }
+                        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }
                     }
                 },
                 callbacks: {
