@@ -1,6 +1,8 @@
 const { GoogleGenAI } = require('@google/genai');
 const WebSocket = require('ws');
 const db = require('../database/db');
+const fs = require('fs');
+const path = require('path');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -19,15 +21,13 @@ function getSystemInstruction(leadInfo) {
     const negocio = leadInfo?.name || "tu negocio";
     const tipoNegocio = leadInfo?.business_type || "tu sector";
 
-    // Generate two realistic days for the closure
     const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     const today = new Date();
 
-    // Helper to get next weekday
     const getNextWeekday = (date, offset) => {
         let d = new Date(date);
         d.setDate(d.getDate() + offset);
-        while (d.getDay() === 0 || d.getDay() === 6) { // Skip weekends
+        while (d.getDay() === 0 || d.getDay() === 6) {
             d.setDate(d.getDate() + 1);
         }
         return days[d.getDay()];
@@ -111,32 +111,89 @@ Cuéntame, ¿a ti cómo te llega la mayoría de clientes nuevos ahorita?"
 `;
 }
 
+
+// --- NOISE SETUP ---
+const NOISE_PATH = path.join(__dirname, '../assets/office_noise_v3.pcm');
+let noiseBuffer = null;
+let noiseIndex = 0;
+
+try {
+    if (fs.existsSync(NOISE_PATH)) {
+        noiseBuffer = fs.readFileSync(NOISE_PATH);
+        console.log(`✅ Loaded background noise: ${NOISE_PATH} (Size: ${noiseBuffer.length} bytes)`);
+    } else {
+        console.error("❌ Office noise file not found at:", NOISE_PATH);
+    }
+} catch (e) {
+    console.error("❌ Error loading noise:", e);
+}
+
+
 module.exports = (connection) => {
     const twilioWs = connection;
     let streamSid = null;
     let liveSession = null;
     let leadId = null;
     let leadInfo = null;
-    let noiseInterval = null;
 
-    // Function to keep noise alive even when AI is silent
-    function startBackgroundNoise() {
-        if (noiseInterval) clearInterval(noiseInterval);
+    // AI Audio Sync Queue
+    let aiAudioQueue = []; // Queue of { buffer: Buffer, offset: number }
 
-        noiseInterval = setInterval(() => {
-            if (streamSid && twilioWs.readyState === WebSocket.OPEN && noiseBuffer) {
-                // Generate 100ms of noise (8000 samples * 0.1s = 800 samples)
-                const silence = Buffer.alloc(1600); // 800 samples * 2 bytes (16-bit)
-                const mulawNoise = processOutputAudio(silence, 8000); // This will add noise to silence
+    // Adds AI audio (converted to 8000Hz) to the queue
+    function pushToAiQueue(pcmData, rate) {
+        const samples = new Int16Array(pcmData.buffer, pcmData.byteOffset, pcmData.length / 2);
+        const ratio = rate / 8000;
+        const outputSamplesCount = Math.floor(samples.length / ratio);
 
-                const payload = {
-                    event: 'media',
-                    streamSid: streamSid,
-                    media: { payload: mulawNoise.toString('base64') }
-                };
-                twilioWs.send(JSON.stringify(payload));
+        const pcm8k = Buffer.alloc(outputSamplesCount * 2);
+        for (let i = 0; i < outputSamplesCount; i++) {
+            const sourceIndex = Math.floor(i * ratio);
+            pcm8k.writeInt16LE(samples[sourceIndex], i * 2);
+        }
+        aiAudioQueue.push({ buffer: pcm8k, offset: 0 });
+    }
+
+    // Pulls EXACTLY `samplesCount` of AI audio mixed with constant background noise
+    function getSynchronizedMixedChunk(samplesCount = 160) {
+        const aiSamples = new Int16Array(samplesCount);
+        let outIdx = 0;
+
+        // Pull samples from AI Queue
+        while (outIdx < samplesCount && aiAudioQueue.length > 0) {
+            let bufObj = aiAudioQueue[0];
+            let available = (bufObj.buffer.length - bufObj.offset) / 2;
+            let toTake = Math.min(available, samplesCount - outIdx);
+
+            for (let i = 0; i < toTake; i++) {
+                aiSamples[outIdx++] = bufObj.buffer.readInt16LE(bufObj.offset + i * 2);
             }
-        }, 100); // Send every 100ms
+            bufObj.offset += toTake * 2;
+
+            if (bufObj.offset >= bufObj.buffer.length) {
+                aiAudioQueue.shift(); // Remove depleted buffer
+            }
+        }
+
+        const mulaw = Buffer.alloc(samplesCount);
+
+        for (let i = 0; i < samplesCount; i++) {
+            let aiSample = aiSamples[i]; // 0 if empty
+            let noiseSample = 0;
+
+            if (noiseBuffer && noiseBuffer.length > 0) {
+                noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
+                noiseIndex++;
+            }
+
+            // MIX MATH: AI + Noise (50%)
+            // The AI is generally loud, background noise at 0.5 ratio should be very audible
+            let mixed = aiSample + (noiseSample * 0.5);
+            mixed = Math.min(32767, Math.max(-32768, mixed));
+
+            mulaw[i] = linearToMuLaw(mixed);
+        }
+
+        return mulaw;
     }
 
     async function setupGemini() {
@@ -146,7 +203,6 @@ module.exports = (connection) => {
 
             console.log(`🚀 Connecting Gemini for Lead: ${leadInfo?.name || 'Unknown'}`);
 
-            // Assign the connect promise to liveSession first to avoid null reference in callbacks
             const session = await ai.live.connect({
                 model: modelName,
                 config: {
@@ -169,18 +225,15 @@ module.exports = (connection) => {
                                     const pcmData = Buffer.from(part.inlineData.data, 'base64');
                                     const rateMatch = mimeType.match(/rate=(\d+)/);
                                     const rate = rateMatch ? parseInt(rateMatch[1]) : 24000;
-                                    const mulawBuffer = processOutputAudio(pcmData, rate);
 
-                                    const payload = {
-                                        event: 'media',
-                                        streamSid: streamSid,
-                                        media: { payload: mulawBuffer.toString('base64') }
-                                    };
-                                    if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
-                                        twilioWs.send(JSON.stringify(payload));
-                                    }
+                                    // Just queue the audio. The Twilio 'media' clock will consume it.
+                                    pushToAiQueue(pcmData, rate);
                                 }
                             }
+                        }
+                        if (message.serverContent && message.serverContent.interrupted) {
+                            console.log("⚠️ AI Interrupted - Clearing Audio Queue");
+                            aiAudioQueue = []; // Immediate silence, next chunk will just be noise
                         }
                     },
                     onerror: (err) => console.error("❌ Gemini SDK Error Callback:", err),
@@ -190,7 +243,6 @@ module.exports = (connection) => {
 
             liveSession = session;
 
-            // Start greeting once connected (safe to use session here)
             console.log('✅ SDK Gemini Live Connected');
             const negocio = leadInfo?.name || "tu negocio";
             session.sendClientContent({
@@ -222,25 +274,42 @@ module.exports = (connection) => {
                         }
                     }
 
-                    // Start noise loop immediately to fill dead air
-                    startBackgroundNoise();
-
                     setupGemini();
                     break;
 
                 case 'media':
                     if (liveSession) {
-                        const mulaw = Buffer.from(data.media.payload, 'base64');
-                        const pcm16k = processInputAudio(mulaw);
+                        const mulawIn = Buffer.from(data.media.payload, 'base64');
+                        const pcm16k = processInputAudio(mulawIn);
+
+                        // Send User Voice to AI
                         liveSession.sendRealtimeInput({
                             audio: { mimeType: "audio/pcm;rate=16000", data: pcm16k.toString('base64') }
                         });
+
+                        // --- SYNCHRONIZED CLOCK ---
+                        // Twilio sends exact chunks of ~20ms (usually 160 bytes for mulaw)
+                        // We reply matching that EXACT chunk size.
+                        const mixMulawOut = getSynchronizedMixedChunk(mulawIn.length);
+
+                        const payload = {
+                            event: 'media',
+                            streamSid: streamSid,
+                            media: { payload: mixMulawOut.toString('base64') }
+                        };
+
+                        if (twilioWs.readyState === WebSocket.OPEN) {
+                            twilioWs.send(JSON.stringify(payload));
+                        }
                     }
                     break;
-
+                case 'clear':
+                    console.log("🧹 Call Audio cleared. Flushing queue.");
+                    aiAudioQueue = [];
+                    break;
                 case 'stop':
-                    console.log('Stream stopped');
-                    if (noiseInterval) clearInterval(noiseInterval);
+                    console.log('🛑 Stream stopped');
+                    aiAudioQueue = [];
                     break;
             }
         } catch (e) {
@@ -249,10 +318,11 @@ module.exports = (connection) => {
     });
 
     twilioWs.on('close', () => {
-        if (noiseInterval) clearInterval(noiseInterval);
         console.log('Twilio connection closed');
+        aiAudioQueue = [];
     });
 };
+
 
 // --- AUDIO UTILS ---
 
@@ -269,52 +339,6 @@ function processInputAudio(mulawBuffer) {
         pcm16[i * 2 + 1] = sample;
     }
     return Buffer.from(pcm16.buffer);
-}
-
-const fs = require('fs');
-const path = require('path');
-
-// Load noise buffer (PCM 16-bit 16kHz for better mixing)
-// const NOISE_PATH = path.join(__dirname, '../assets/office_noise.mulaw');
-const NOISE_PATH = path.join(__dirname, '../assets/office_noise_v3.pcm');
-let noiseBuffer = null;
-let noiseIndex = 0;
-
-try {
-    if (fs.existsSync(NOISE_PATH)) {
-        noiseBuffer = fs.readFileSync(NOISE_PATH);
-    } else {
-        console.error("Office noise file not found at:", NOISE_PATH);
-    }
-} catch (e) {
-    console.error("Error loading noise:", e);
-}
-
-function processOutputAudio(pcmBuffer, inputRate) {
-    const samples = new Int16Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 2);
-    const ratio = inputRate / 8000;
-    const outputSamples = Math.floor(samples.length / ratio);
-
-    // Create Mu-Law buffer directly
-    const mulaw = Buffer.alloc(outputSamples);
-
-    for (let i = 0; i < outputSamples; i++) {
-        const sourceIndex = Math.floor(i * ratio);
-        let sample = (sourceIndex < samples.length) ? samples[sourceIndex] : 0;
-
-        // Mix with background noise if available
-        if (noiseBuffer && noiseBuffer.length > 0) {
-            // Read 2 bytes as Int16LE
-            const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
-
-            // Mix: Voice (~70%) + Noise (~30%) - Increased for visibility
-            sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.4));
-            noiseIndex++;
-        }
-
-        mulaw[i] = linearToMuLaw(sample);
-    }
-    return mulaw;
 }
 
 function linearToMuLaw(linear) {
