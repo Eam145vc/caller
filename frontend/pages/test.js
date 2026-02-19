@@ -10,7 +10,7 @@ export default function TestCall() {
         setStatus('Initiating call...');
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
             const res = await fetch(`${apiUrl}/api/calls/test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
