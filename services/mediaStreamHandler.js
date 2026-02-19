@@ -275,7 +275,8 @@ const fs = require('fs');
 const path = require('path');
 
 // Load noise buffer (PCM 16-bit 16kHz for better mixing)
-const NOISE_PATH = path.join(__dirname, '../assets/office_noise.mulaw');
+// const NOISE_PATH = path.join(__dirname, '../assets/office_noise.mulaw');
+const NOISE_PATH = path.join(__dirname, '../assets/office_noise_v3.pcm');
 let noiseBuffer = null;
 let noiseIndex = 0;
 
@@ -303,9 +304,8 @@ function processOutputAudio(pcmBuffer, inputRate) {
 
         // Mix with background noise if available
         if (noiseBuffer && noiseBuffer.length > 0) {
-            // The file is MULAW. Decode byte to linear first.
-            const noiseByte = noiseBuffer[noiseIndex % noiseBuffer.length];
-            const noiseSample = MU_LAW_DECODE_TABLE[noiseByte];
+            // Read 2 bytes as Int16LE
+            const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
 
             // Mix: Voice (~70%) + Noise (~30%) - Increased for visibility
             sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.4));
