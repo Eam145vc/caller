@@ -137,12 +137,6 @@ module.exports = (connection) => {
                 callbacks: {
                     onopen: () => {
                         console.log('✅ Gemini SDK Connection Open');
-                        // Use the local 'session' variable to be stay safe from race conditions
-                        const negocio = leadInfo?.name || "tu negocio";
-                        session.sendClientContent({
-                            turns: [{ role: 'user', parts: [{ text: `Hola Sofía, ¡empecemos la llamada con el dueño de ${negocio}!` }] }],
-                            turnComplete: true
-                        });
                     },
                     onmessage: (message) => {
                         if (message.serverContent && message.serverContent.modelTurn) {
@@ -173,6 +167,15 @@ module.exports = (connection) => {
             });
 
             liveSession = session;
+
+            // Start greeting once connected (safe to use session here)
+            console.log('✅ SDK Gemini Live Connected');
+            const negocio = leadInfo?.name || "tu negocio";
+            session.sendClientContent({
+                turns: [{ role: 'user', parts: [{ text: `Hola Sofía, ¡empecemos la llamada con el dueño de ${negocio}!` }] }],
+                turnComplete: true
+            });
+
         } catch (err) {
             console.error("❌ Gemini SDK Connection Error:", err);
         }
