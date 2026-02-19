@@ -3,7 +3,7 @@ const WebSocket = require('ws');
 const db = require('../database/db');
 
 // GEMINI CONFIGURATION
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "AIzaSyC2Hxwt-Uk-kTCAkaAekuZnvgWDKWY-7_c";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = "gemini-2.0-flash-exp";
 
 // SYSTEM PROMPT FOR SOFIA
