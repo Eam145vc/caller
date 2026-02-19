@@ -1,8 +1,6 @@
 const { GoogleGenAI } = require('@google/genai');
 const WebSocket = require('ws');
 const db = require('../database/db');
-const fs = require('fs');
-const path = require('path');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -111,73 +109,12 @@ Cuéntame, ¿a ti cómo te llega la mayoría de clientes nuevos ahorita?"
 `;
 }
 
-
-// --- NOISE SETUP ---
-const NOISE_PATH = path.join(__dirname, '../assets/office_noise_v3.pcm');
-let noiseBuffer = null;
-let noiseInt16Array = null;
-let noiseIndex = 0;
-
-try {
-    if (fs.existsSync(NOISE_PATH)) {
-        noiseBuffer = fs.readFileSync(NOISE_PATH);
-        noiseInt16Array = new Int16Array(noiseBuffer.buffer, noiseBuffer.byteOffset, noiseBuffer.length / 2);
-        console.log(`✅ Loaded background noise: ${NOISE_PATH} (Length array: ${noiseInt16Array.length})`);
-    } else {
-        console.error("❌ Office noise file not found at:", NOISE_PATH);
-    }
-} catch (e) {
-    console.error("❌ Error loading noise:", e);
-}
-
-
 module.exports = (connection) => {
     const twilioWs = connection;
     let streamSid = null;
     let liveSession = null;
     let leadId = null;
     let leadInfo = null;
-
-    // AI Audio Sync Queue (Array of Integers)
-    let aiAudioQueue = [];
-
-    // Adds AI audio (converted to 8000Hz) to the queue
-    function pushToAiQueue(pcmData, rate) {
-        const samples = new Int16Array(pcmData.buffer, pcmData.byteOffset, pcmData.length / 2);
-        const ratio = rate / 8000;
-        const outputSamplesCount = Math.floor(samples.length / ratio);
-
-        for (let i = 0; i < outputSamplesCount; i++) {
-            const sourceIndex = Math.floor(i * ratio);
-            aiAudioQueue.push(samples[sourceIndex]);
-        }
-    }
-
-    // Pulls EXACTLY `samplesCount` of AI audio mixed with constant background noise
-    function getSynchronizedMixedChunk(samplesCount = 160) {
-        const mulaw = Buffer.alloc(samplesCount);
-
-        for (let i = 0; i < samplesCount; i++) {
-            // Shift 1 sample off the AI queue, or 0 if silent
-            let aiSample = aiAudioQueue.length > 0 ? aiAudioQueue.shift() : 0;
-            let noiseSample = 0;
-
-            if (noiseInt16Array && noiseInt16Array.length > 0) {
-                noiseSample = noiseInt16Array[noiseIndex % noiseInt16Array.length];
-                noiseIndex++;
-            }
-
-            // MIX MATH: AI + Noise
-            // We multiply noise heavily (4x) to make it audible and slightly lower the AI (80%) to balance it.
-            let mixed = (aiSample * 0.8) + (noiseSample * 4.0);
-            mixed = Math.min(32767, Math.max(-32768, mixed));
-
-            mulaw[i] = linearToMuLaw(mixed);
-        }
-
-        return mulaw;
-    }
-
 
     async function setupGemini() {
         try {
@@ -208,15 +145,18 @@ module.exports = (connection) => {
                                     const pcmData = Buffer.from(part.inlineData.data, 'base64');
                                     const rateMatch = mimeType.match(/rate=(\d+)/);
                                     const rate = rateMatch ? parseInt(rateMatch[1]) : 24000;
+                                    const mulawBuffer = processOutputAudio(pcmData, rate);
 
-                                    // Just queue the audio. The Twilio 'media' clock will consume it.
-                                    pushToAiQueue(pcmData, rate);
+                                    const payload = {
+                                        event: 'media',
+                                        streamSid: streamSid,
+                                        media: { payload: mulawBuffer.toString('base64') }
+                                    };
+                                    if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                                        twilioWs.send(JSON.stringify(payload));
+                                    }
                                 }
                             }
-                        }
-                        if (message.serverContent && message.serverContent.interrupted) {
-                            console.log("⚠️ AI Interrupted - Clearing Audio Queue");
-                            aiAudioQueue = []; // Immediate silence, next chunk will just be noise
                         }
                     },
                     onerror: (err) => console.error("❌ Gemini SDK Error Callback:", err),
@@ -264,35 +204,14 @@ module.exports = (connection) => {
                     if (liveSession) {
                         const mulawIn = Buffer.from(data.media.payload, 'base64');
                         const pcm16k = processInputAudio(mulawIn);
-
-                        // Send User Voice to AI
                         liveSession.sendRealtimeInput({
                             audio: { mimeType: "audio/pcm;rate=16000", data: pcm16k.toString('base64') }
                         });
-
-                        // --- SYNCHRONIZED CLOCK ---
-                        // Twilio sends exact chunks of ~20ms (usually 160 bytes for mulaw)
-                        // We reply matching that EXACT chunk size.
-                        const mixMulawOut = getSynchronizedMixedChunk(mulawIn.length);
-
-                        const payload = {
-                            event: 'media',
-                            streamSid: streamSid,
-                            media: { payload: mixMulawOut.toString('base64') }
-                        };
-
-                        if (twilioWs.readyState === WebSocket.OPEN) {
-                            twilioWs.send(JSON.stringify(payload));
-                        }
                     }
                     break;
-                case 'clear':
-                    console.log("🧹 Call Audio cleared. Flushing queue.");
-                    aiAudioQueue = [];
-                    break;
+
                 case 'stop':
-                    console.log('🛑 Stream stopped');
-                    aiAudioQueue = [];
+                    console.log('Stream stopped');
                     break;
             }
         } catch (e) {
@@ -302,10 +221,8 @@ module.exports = (connection) => {
 
     twilioWs.on('close', () => {
         console.log('Twilio connection closed');
-        aiAudioQueue = [];
     });
 };
-
 
 // --- AUDIO UTILS ---
 
@@ -322,6 +239,21 @@ function processInputAudio(mulawBuffer) {
         pcm16[i * 2 + 1] = sample;
     }
     return Buffer.from(pcm16.buffer);
+}
+
+function processOutputAudio(pcmBuffer, inputRate) {
+    const samples = new Int16Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 2);
+    const ratio = inputRate / 8000;
+    const outputSamples = Math.floor(samples.length / ratio);
+
+    const mulaw = Buffer.alloc(outputSamples);
+
+    for (let i = 0; i < outputSamples; i++) {
+        const sourceIndex = Math.floor(i * ratio);
+        let sample = (sourceIndex < samples.length) ? samples[sourceIndex] : 0;
+        mulaw[i] = linearToMuLaw(sample);
+    }
+    return mulaw;
 }
 
 function linearToMuLaw(linear) {
