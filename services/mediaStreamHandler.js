@@ -115,12 +115,14 @@ Cuéntame, ¿a ti cómo te llega la mayoría de clientes nuevos ahorita?"
 // --- NOISE SETUP ---
 const NOISE_PATH = path.join(__dirname, '../assets/office_noise_v3.pcm');
 let noiseBuffer = null;
+let noiseInt16Array = null;
 let noiseIndex = 0;
 
 try {
     if (fs.existsSync(NOISE_PATH)) {
         noiseBuffer = fs.readFileSync(NOISE_PATH);
-        console.log(`✅ Loaded background noise: ${NOISE_PATH} (Size: ${noiseBuffer.length} bytes)`);
+        noiseInt16Array = new Int16Array(noiseBuffer.buffer, noiseBuffer.byteOffset, noiseBuffer.length / 2);
+        console.log(`✅ Loaded background noise: ${NOISE_PATH} (Length array: ${noiseInt16Array.length})`);
     } else {
         console.error("❌ Office noise file not found at:", NOISE_PATH);
     }
@@ -160,13 +162,12 @@ module.exports = (connection) => {
             let aiSample = aiAudioQueue.length > 0 ? aiAudioQueue.shift() : 0;
             let noiseSample = 0;
 
-            if (noiseBuffer && noiseBuffer.length > 0) {
-                noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
+            if (noiseInt16Array && noiseInt16Array.length > 0) {
+                noiseSample = noiseInt16Array[noiseIndex % noiseInt16Array.length];
                 noiseIndex++;
             }
 
             // MIX MATH: AI + Noise
-            // The office noise file is natively very quiet (max value ~3900 out of 32767).
             // We multiply noise heavily (4x) to make it audible and slightly lower the AI (80%) to balance it.
             let mixed = (aiSample * 0.8) + (noiseSample * 4.0);
             mixed = Math.min(32767, Math.max(-32768, mixed));
