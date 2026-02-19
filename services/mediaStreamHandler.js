@@ -302,10 +302,13 @@ function processOutputAudio(pcmBuffer, inputRate) {
         let sample = (sourceIndex < samples.length) ? samples[sourceIndex] : 0;
 
         // Mix with background noise if available
-        if (noiseBuffer) {
-            const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
-            // Mix: Voice (80%) + Noise (20%)
-            sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.2));
+        if (noiseBuffer && noiseBuffer.length > 0) {
+            // The file is MULAW. Decode byte to linear first.
+            const noiseByte = noiseBuffer[noiseIndex % noiseBuffer.length];
+            const noiseSample = MU_LAW_DECODE_TABLE[noiseByte];
+
+            // Mix: Voice (~70%) + Noise (~30%) - Increased for visibility
+            sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.4));
             noiseIndex++;
         }
 
