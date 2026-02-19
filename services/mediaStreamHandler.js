@@ -213,7 +213,7 @@ module.exports = (connection) => {
                         realtimeInput: {
                             mediaChunks: [
                                 {
-                                    mimeType: "audio/pcm;rate=24000",
+                                    mimeType: "audio/pcm;rate=16000",
                                     data: outBuffer.toString('base64')
                                 }
                             ]
