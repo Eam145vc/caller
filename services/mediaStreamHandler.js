@@ -55,42 +55,14 @@ module.exports = (connection) => {
     geminiWs.on('open', () => {
         console.log('✅ Connected to Gemini Live');
 
-        // Initial Setup Message
+        // Initial Setup Message - SIMPLIFIED TO DEBUG 1008
         const setupMessage = {
             setup: {
                 model: `models/${GEMINI_MODEL}`,
                 generationConfig: {
-                    responseModalities: ["AUDIO"], // We want audio back
-                    speechConfig: {
-                        voiceConfig: {
-                            prebuiltVoiceConfig: {
-                                voiceName: "Aoede"
-                            }
-                        }
-                    }
-                },
-                systemInstruction: {
-                    parts: [{ text: SYSTEM_INSTRUCTION }]
-                },
-                tools: [
-                    {
-                        functionDeclarations: [
-                            {
-                                name: "schedule_appointment",
-                                description: "Schedule a consultation appointment",
-                                parameters: {
-                                    type: "OBJECT",
-                                    properties: {
-                                        date: { type: "STRING", description: "Date in YYYY-MM-DD" },
-                                        time: { type: "STRING", description: "Time in HH:MM" },
-                                        notes: { type: "STRING", description: "Notes" }
-                                    },
-                                    required: ["date", "time"]
-                                }
-                            }
-                        ]
-                    }
-                ]
+                    responseModalities: ["AUDIO"]
+                }
+                // Removed tools and voice config temporarily to isolate error
             }
         };
         geminiWs.send(JSON.stringify(setupMessage));
