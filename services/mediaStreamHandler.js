@@ -22,7 +22,10 @@ REGLAS:
 4. NO VENDAS precios, vende la curiosidad de ver la demo.
 `;
 
-const ai = new GoogleGenAI(GEMINI_API_KEY);
+const ai = new GoogleGenAI({
+    apiKey: GEMINI_API_KEY,
+    apiVersion: 'v1alpha'
+});
 
 module.exports = (connection) => {
     const twilioWs = connection;
