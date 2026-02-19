@@ -199,12 +199,11 @@ module.exports = (connection) => {
                     // We MUST upsample 8k -> 16k/24k.
                     // Simple upsampling: repeat each sample 3 times for 24k.
 
-                    const upsampled = new Int16Array(pcm.length * 3); // 8k -> 24k
+                    const upsampled = new Int16Array(pcm.length * 2); // 8k -> 16k
                     for (let i = 0; i < pcm.length / 2; i++) {
                         const val = pcm.readInt16LE(i * 2);
-                        upsampled[i * 3] = val;
-                        upsampled[i * 3 + 1] = val; // Linear interpolation better but this works
-                        upsampled[i * 3 + 2] = val;
+                        upsampled[i * 2] = val;
+                        upsampled[i * 2 + 1] = val;
                     }
 
                     const outBuffer = Buffer.from(upsampled.buffer);
