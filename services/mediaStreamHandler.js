@@ -1,6 +1,5 @@
 const { GoogleGenAI } = require('@google/genai');
 const WebSocket = require('ws');
-const db = require('../database/db');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -32,6 +31,7 @@ module.exports = (connection) => {
 
     async function setupGemini() {
         try {
+            // SDK Live API implementation (Corrected for @google/genai Node.js SDK)
             liveSession = await ai.live.connect({
                 model: GEMINI_MODEL,
                 config: {
@@ -45,37 +45,41 @@ module.exports = (connection) => {
 
             console.log('✅ SDK Gemini Live Connected');
 
-            // Handle incoming messages from Gemini
-            liveSession.on('message', (message) => {
-                if (message.serverContent && message.serverContent.modelTurn) {
-                    const parts = message.serverContent.modelTurn.parts;
-                    for (const part of parts) {
-                        if (part.inlineData && part.inlineData.mimeType.startsWith('audio/pcm')) {
-                            // Downsample 24k -> 8k and send to Twilio
-                            const pcmData = Buffer.from(part.inlineData.data, 'base64');
-                            const mulawBuffer = processOutputAudio(pcmData);
+            // Handling output from Gemini using the response iterator pattern
+            // or by monitoring the session. 
+            // The SDK session object is an async iterator of responses.
+            (async () => {
+                try {
+                    for await (const message of liveSession) {
+                        if (message.serverContent && message.serverContent.modelTurn) {
+                            const parts = message.serverContent.modelTurn.parts;
+                            for (const part of parts) {
+                                if (part.inlineData && part.inlineData.mimeType.startsWith('audio/pcm')) {
+                                    const pcmData = Buffer.from(part.inlineData.data, 'base64');
+                                    const mulawBuffer = processOutputAudio(pcmData);
 
-                            const payload = {
-                                event: 'media',
-                                streamSid: streamSid,
-                                media: { payload: mulawBuffer.toString('base64') }
-                            };
-                            if (streamSid) twilioWs.send(JSON.stringify(payload));
+                                    const payload = {
+                                        event: 'media',
+                                        streamSid: streamSid,
+                                        media: { payload: mulawBuffer.toString('base64') }
+                                    };
+                                    if (streamSid) twilioWs.send(JSON.stringify(payload));
+                                }
+                            }
                         }
                     }
+                } catch (err) {
+                    console.error("❌ Gemini Session Iterator Error:", err);
                 }
-            });
+            })();
 
-            // Greet first
+            // Greet first - Using .send() for client content
             liveSession.send({
-                clientContent: {
-                    turns: [{ role: "user", parts: [{ text: "Hola Sofía, ¡empecemos la llamada!" }] }],
-                    turnComplete: true
-                }
+                parts: [{ text: "Hola Sofía, ¡empecemos la llamada!" }]
             });
 
         } catch (err) {
-            console.error("❌ Gemini SDK Error:", err);
+            console.error("❌ Gemini SDK Connection Error:", err);
         }
     }
 
@@ -96,6 +100,7 @@ module.exports = (connection) => {
                     const mulaw = Buffer.from(data.media.payload, 'base64');
                     const pcm16k = processInputAudio(mulaw);
 
+                    // Sending real-time audio input
                     liveSession.send({
                         realtimeInput: {
                             mediaChunks: [{
@@ -109,7 +114,6 @@ module.exports = (connection) => {
 
             case 'stop':
                 console.log('Stream stopped');
-                // Session cleanup? SDK might need explicit close if session object supports it.
                 break;
         }
     });
