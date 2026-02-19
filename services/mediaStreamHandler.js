@@ -136,8 +136,8 @@ module.exports = (connection) => {
     let leadId = null;
     let leadInfo = null;
 
-    // AI Audio Sync Queue
-    let aiAudioQueue = []; // Queue of { buffer: Buffer, offset: number }
+    // AI Audio Sync Queue (Array of Integers)
+    let aiAudioQueue = [];
 
     // Adds AI audio (converted to 8000Hz) to the queue
     function pushToAiQueue(pcmData, rate) {
@@ -145,39 +145,19 @@ module.exports = (connection) => {
         const ratio = rate / 8000;
         const outputSamplesCount = Math.floor(samples.length / ratio);
 
-        const pcm8k = Buffer.alloc(outputSamplesCount * 2);
         for (let i = 0; i < outputSamplesCount; i++) {
             const sourceIndex = Math.floor(i * ratio);
-            pcm8k.writeInt16LE(samples[sourceIndex], i * 2);
+            aiAudioQueue.push(samples[sourceIndex]);
         }
-        aiAudioQueue.push({ buffer: pcm8k, offset: 0 });
     }
 
     // Pulls EXACTLY `samplesCount` of AI audio mixed with constant background noise
     function getSynchronizedMixedChunk(samplesCount = 160) {
-        const aiSamples = new Int16Array(samplesCount);
-        let outIdx = 0;
-
-        // Pull samples from AI Queue
-        while (outIdx < samplesCount && aiAudioQueue.length > 0) {
-            let bufObj = aiAudioQueue[0];
-            let available = (bufObj.buffer.length - bufObj.offset) / 2;
-            let toTake = Math.min(available, samplesCount - outIdx);
-
-            for (let i = 0; i < toTake; i++) {
-                aiSamples[outIdx++] = bufObj.buffer.readInt16LE(bufObj.offset + i * 2);
-            }
-            bufObj.offset += toTake * 2;
-
-            if (bufObj.offset >= bufObj.buffer.length) {
-                aiAudioQueue.shift(); // Remove depleted buffer
-            }
-        }
-
         const mulaw = Buffer.alloc(samplesCount);
 
         for (let i = 0; i < samplesCount; i++) {
-            let aiSample = aiSamples[i]; // 0 if empty
+            // Shift 1 sample off the AI queue, or 0 if silent
+            let aiSample = aiAudioQueue.length > 0 ? aiAudioQueue.shift() : 0;
             let noiseSample = 0;
 
             if (noiseBuffer && noiseBuffer.length > 0) {
@@ -185,9 +165,9 @@ module.exports = (connection) => {
                 noiseIndex++;
             }
 
-            // MIX MATH: AI + Noise (50%)
-            // The AI is generally loud, background noise at 0.5 ratio should be very audible
-            let mixed = aiSample + (noiseSample * 0.5);
+            // MIX MATH: AI + Noise
+            // We multiply noise by 0.8 (80%) so it is impossible to miss.
+            let mixed = aiSample + (noiseSample * 0.8);
             mixed = Math.min(32767, Math.max(-32768, mixed));
 
             mulaw[i] = linearToMuLaw(mixed);
@@ -195,6 +175,7 @@ module.exports = (connection) => {
 
         return mulaw;
     }
+
 
     async function setupGemini() {
         try {
