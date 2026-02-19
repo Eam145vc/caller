@@ -31,7 +31,7 @@ module.exports = (connection) => {
 
     async function setupGemini() {
         try {
-            // SDK Live API implementation (Corrected for @google/genai Node.js SDK)
+            // SDK Live API implementation (Corrected for @google/genai Node.js SDK v1.42.0)
             liveSession = await ai.live.connect({
                 model: GEMINI_MODEL,
                 config: {
@@ -40,17 +40,11 @@ module.exports = (connection) => {
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } }
                     }
-                }
-            });
-
-            console.log('✅ SDK Gemini Live Connected');
-
-            // Handling output from Gemini using the response iterator pattern
-            // or by monitoring the session. 
-            // The SDK session object is an async iterator of responses.
-            (async () => {
-                try {
-                    for await (const message of liveSession) {
+                },
+                callbacks: {
+                    onopen: () => console.log('✅ Gemini SDK Connection Open'),
+                    onmessage: (message) => {
+                        // message is a LiveServerMessage
                         if (message.serverContent && message.serverContent.modelTurn) {
                             const parts = message.serverContent.modelTurn.parts;
                             for (const part of parts) {
@@ -63,19 +57,24 @@ module.exports = (connection) => {
                                         streamSid: streamSid,
                                         media: { payload: mulawBuffer.toString('base64') }
                                     };
-                                    if (streamSid) twilioWs.send(JSON.stringify(payload));
+                                    if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                                        twilioWs.send(JSON.stringify(payload));
+                                    }
                                 }
                             }
                         }
-                    }
-                } catch (err) {
-                    console.error("❌ Gemini Session Iterator Error:", err);
+                    },
+                    onerror: (err) => console.error("❌ Gemini SDK Error:", err),
+                    onclose: () => console.log("ℹ️ Gemini SDK Connection Closed")
                 }
-            })();
+            });
 
-            // Greet first - Using .send() for client content
-            liveSession.send({
-                parts: [{ text: "Hola Sofía, ¡empecemos la llamada!" }]
+            console.log('✅ SDK Gemini Live Connected');
+
+            // Greet first - Using sendClientContent for text/turns
+            liveSession.sendClientContent({
+                turns: [{ role: 'user', parts: [{ text: "Hola Sofía, ¡empecemos la llamada!" }] }],
+                turnComplete: true
             });
 
         } catch (err) {
@@ -100,13 +99,11 @@ module.exports = (connection) => {
                     const mulaw = Buffer.from(data.media.payload, 'base64');
                     const pcm16k = processInputAudio(mulaw);
 
-                    // Sending real-time audio input
-                    liveSession.send({
-                        realtimeInput: {
-                            mediaChunks: [{
-                                mimeType: "audio/pcm;rate=16000",
-                                data: pcm16k.toString('base64')
-                            }]
+                    // Sending real-time audio input using sendRealtimeInput
+                    liveSession.sendRealtimeInput({
+                        audio: {
+                            mimeType: "audio/pcm;rate=16000",
+                            data: pcm16k.toString('base64')
                         }
                     });
                 }
