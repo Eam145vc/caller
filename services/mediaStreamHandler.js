@@ -50,21 +50,18 @@ module.exports = (connection) => {
                 callbacks: {
                     onopen: () => console.log('✅ Gemini SDK Connection Open'),
                     onmessage: (message) => {
-                        // Log message type for debugging (ignore usageMetadata to reduce noise)
-                        if (!message.usageMetadata) {
-                            console.log('📬 Gemini Message Received:', Object.keys(message).filter(k => message[k]));
-                        }
-
-                        if (message.goAway) {
-                            console.warn("⚠️ Gemini sent goAway:", message.goAway);
-                        }
-
                         if (message.serverContent && message.serverContent.modelTurn) {
                             const parts = message.serverContent.modelTurn.parts;
                             for (const part of parts) {
                                 if (part.inlineData && part.inlineData.mimeType.startsWith('audio/pcm')) {
+                                    const mimeType = part.inlineData.mimeType;
                                     const pcmData = Buffer.from(part.inlineData.data, 'base64');
-                                    const mulawBuffer = processOutputAudio(pcmData);
+
+                                    // Extract rate from mimeType (e.g., "audio/pcm;rate=24000")
+                                    const rateMatch = mimeType.match(/rate=(\d+)/);
+                                    const rate = rateMatch ? parseInt(rateMatch[1]) : 24000;
+
+                                    const mulawBuffer = processOutputAudio(pcmData, rate);
 
                                     const payload = {
                                         event: 'media',
@@ -144,28 +141,57 @@ function processInputAudio(mulawBuffer) {
     for (let i = 0; i < mulawBuffer.length; i++) {
         const sample = MU_LAW_DECODE_TABLE[mulawBuffer[i]];
         pcm16[i * 2] = sample;
-        pcm16[i * 2 + 1] = sample; // Upsample 8k -> 16k
+        pcm16[i * 2 + 1] = sample; // Crude 8k -> 16k upsample
     }
     return Buffer.from(pcm16.buffer);
 }
 
-function processOutputAudio(pcm24k) {
-    const pcm16 = new Int16Array(pcm24k.buffer, pcm24k.byteOffset, pcm24k.length / 2);
-    const mulaw = Buffer.alloc(Math.floor(pcm16.length / 3));
-    for (let i = 0, j = 0; i < pcm16.length; i += 3, j++) {
-        mulaw[j] = linearToMuLaw(pcm16[i]);
+function processOutputAudio(pcmBuffer, inputRate) {
+    // pcmBuffer is a Buffer (raw bytes, 16-bit LE PCM)
+    // Twilio needs 8000Hz Mu-law
+    const samples = new Int16Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 2);
+    const ratio = inputRate / 8000;
+    const outputSamples = Math.floor(samples.length / ratio);
+    const mulaw = Buffer.alloc(outputSamples);
+
+    for (let i = 0; i < outputSamples; i++) {
+        // Simple decimation/resampling
+        const sourceIndex = Math.floor(i * ratio);
+        mulaw[i] = linearToMuLaw(samples[sourceIndex]);
     }
     return mulaw;
 }
 
-function linearToMuLaw(pcm_val) {
+function linearToMuLaw(linear) {
+    // Standard G.711 mu-law compression
     const BIAS = 0x84;
-    const MAX = 32635;
+    const CLIP = 32635;
     let mask;
-    if (pcm_val < 0) { pcm_val = BIAS - pcm_val; mask = 0x7F; }
-    else { pcm_val += BIAS; mask = 0xFF; }
-    if (pcm_val > MAX) pcm_val = MAX;
-    const seg = (pcm_val < 0x100) ? 0 : (pcm_val < 0x200) ? 1 : (pcm_val < 0x400) ? 2 : (pcm_val < 0x800) ? 3 : (pcm_val < 0x1000) ? 4 : (pcm_val < 0x2000) ? 5 : (pcm_val < 0x4000) ? 6 : 7;
-    let uval = (seg << 4) | ((pcm_val >> (seg + 3)) & 0xF);
-    return ~(uval | mask);
+    let sign;
+    let position;
+    let exponent;
+    let mantissa;
+
+    if (linear < 0) {
+        linear = -linear;
+        sign = 0x80;
+    } else {
+        sign = 0x00;
+    }
+
+    if (linear > CLIP) linear = CLIP;
+    linear = linear + BIAS;
+
+    // Find the exponent (segment)
+    if (linear >= 0x4000) { exponent = 7; position = 14; }
+    else if (linear >= 0x2000) { exponent = 6; position = 13; }
+    else if (linear >= 0x1000) { exponent = 5; position = 12; }
+    else if (linear >= 0x0800) { exponent = 4; position = 11; }
+    else if (linear >= 0x0400) { exponent = 3; position = 10; }
+    else if (linear >= 0x0200) { exponent = 2; position = 9; }
+    else if (linear >= 0x0100) { exponent = 1; position = 8; }
+    else { exponent = 0; position = 7; }
+
+    mantissa = (linear >> (position - 4)) & 0x0F;
+    return ~(sign | (exponent << 4) | mantissa);
 }
