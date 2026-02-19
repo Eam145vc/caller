@@ -55,11 +55,11 @@ Tu misión es agendar una asesoría gratuita de 15 minutos para mostrarle al due
 - No tienen página web y están perdiendo clientes frente a la competencia que sí aparece en Google.
 - Si el cliente acepta una cita, propón el **${dayA}** o el **${dayB}**.
 
-## ACCIONES ESPECIALES (IMPORTANTE)
-Si logras un acuerdo, debes incluir al final de tu respuesta (en texto, aunque no lo digas) uno de estos tags para que el sistema lo registre:
-1. **Agendar Cita**: Si el cliente acepta la reunión, usa el tag: \`[BOOK_APPOINTMENT: YYYY-MM-DD HH:MM]\`. (Ejemplo: [BOOK_APPOINTMENT: 2026-02-21 15:30])
-2. **Seguimiento (Follow-up)**: Si el cliente dice "llámame luego", usa el tag: \`[FOLLOW_UP: YYYY-MM-DD HH:MM]\`.
-3. **No Interesado**: Si dice que no quiere nada, usa: \`[NOT_INTERESTED]\`.
+## ACCIONES ESPECIALES (HERRAMIENTAS)
+Tienes herramientas especiales que debes usar en lugar de solo hablar cuando ocurra lo siguiente:
+1. **Agendar Cita**: Si el cliente acepta la reunión, LLAMA a la función \`book_appointment(scheduled_at)\`. 
+2. **Seguimiento (Follow-up)**: Si el cliente dice "llámame luego", LLAMA a \`schedule_follow_up(scheduled_at)\`.
+3. **No Interesado**: Si dice que no quiere nada, LLAMA a \`mark_not_interested()\`.
 
 ## REGLAS CRÍTICAS DE CONVERSACIÓN
 1. **Escucha Activa**: Si dicen "Aló" o "¿Quién habla?", responde: "Hola, ¿hablo con el encargado de ${negocio}?". No sueltes el discurso hasta confirmar.
@@ -96,7 +96,38 @@ module.exports = (connection) => {
                     systemInstruction: { parts: [{ text: promptText }] },
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }
-                    }
+                    },
+                    tools: [{
+                        functionDeclarations: [
+                            {
+                                name: "book_appointment",
+                                description: "Agendar una cita o asesoría con el cliente.",
+                                parameters: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        scheduled_at: { type: "STRING", description: "Fecha y hora en formato YYYY-MM-DD HH:MM" }
+                                    },
+                                    required: ["scheduled_at"]
+                                }
+                            },
+                            {
+                                name: "schedule_follow_up",
+                                description: "Programar un seguimiento para llamar al cliente más tarde.",
+                                parameters: {
+                                    type: "OBJECT",
+                                    properties: {
+                                        scheduled_at: { type: "STRING", description: "Fecha y hora sugerida de seguimiento" }
+                                    },
+                                    required: ["scheduled_at"]
+                                }
+                            },
+                            {
+                                name: "mark_not_interested",
+                                description: "Marcar al cliente como no interesado en el servicio.",
+                                parameters: { type: "OBJECT", properties: {} }
+                            }
+                        ]
+                    }]
                 },
                 callbacks: {
                     onopen: () => {
@@ -109,44 +140,50 @@ module.exports = (connection) => {
                                 twilioWs.send(JSON.stringify({ event: 'clear', streamSid: streamSid }));
                             }
                         }
-                        if (message.serverContent && message.serverContent.modelTurn) {
-                            const parts = message.serverContent.modelTurn.parts;
-                            for (const part of parts) {
-                                if (part.text) {
-                                    // Process internal tags for DB updates
-                                    console.log("📝 AI Text Part:", part.text);
+                        if (message.serverContent && message.serverContent.toolCall) {
+                            const toolCall = message.serverContent.toolCall;
+                            const responses = [];
 
-                                    // 1. Appointment Booking
-                                    const bookMatch = part.text.match(/\[BOOK_APPOINTMENT:\s*([\d\-\s:]+)\]/);
-                                    if (bookMatch) {
-                                        const dateStr = bookMatch[1].trim();
-                                        console.log(`📅 ACTION: Booking appointment at ${dateStr}`);
+                            for (const call of toolCall.functionCalls) {
+                                console.log(`🛠️ AI TOOL CALL: ${call.name}`, call.args);
+
+                                switch (call.name) {
+                                    case 'book_appointment':
                                         if (leadId && leadId !== 'test') {
                                             db.prepare('INSERT INTO appointments (lead_id, scheduled_at, notes) VALUES (?, ?, ?)')
-                                                .run(leadId, dateStr, 'Agendado por Sofía (IA)');
+                                                .run(leadId, call.args.scheduled_at, 'Agendado por Sofía (IA via Tool)');
                                             db.prepare("UPDATE leads SET status = 'interested' WHERE id = ?").run(leadId);
                                         }
-                                    }
+                                        responses.push({ name: call.name, id: call.id, response: { success: true, message: "Cita agendada" } });
+                                        break;
 
-                                    // 2. Follow up
-                                    const followMatch = part.text.match(/\[FOLLOW_UP:\s*([\d\-\s:]+)\]/);
-                                    if (followMatch) {
-                                        console.log(`📞 ACTION: Scheduled Follow-up at ${followMatch[1]}`);
+                                    case 'schedule_follow_up':
                                         if (leadId && leadId !== 'test') {
                                             db.prepare("UPDATE leads SET status = 'contacted', notes = ? WHERE id = ?")
-                                                .run(`Seguimiento el ${followMatch[1]}`, leadId);
+                                                .run(`Seguimiento el ${call.args.scheduled_at}`, leadId);
                                         }
-                                    }
+                                        responses.push({ name: call.name, id: call.id, response: { success: true, message: "Seguimiento programado" } });
+                                        break;
 
-                                    // 3. Not Interested
-                                    if (part.text.includes('[NOT_INTERESTED]')) {
-                                        console.log("❌ ACTION: Lead marked Not Interested");
+                                    case 'mark_not_interested':
                                         if (leadId && leadId !== 'test') {
                                             db.prepare("UPDATE leads SET status = 'not_interested' WHERE id = ?").run(leadId);
                                         }
-                                    }
+                                        responses.push({ name: call.name, id: call.id, response: { success: true, message: "Marcado como no interesado" } });
+                                        break;
                                 }
+                            }
 
+                            if (responses.length > 0) {
+                                session.sendClientContent({
+                                    toolResponses: { functionResponses: responses }
+                                });
+                            }
+                        }
+
+                        if (message.serverContent && message.serverContent.modelTurn) {
+                            const parts = message.serverContent.modelTurn.parts;
+                            for (const part of parts) {
                                 if (part.inlineData && part.inlineData.mimeType.startsWith('audio/pcm')) {
                                     const mimeType = part.inlineData.mimeType;
                                     const pcmData = Buffer.from(part.inlineData.data, 'base64');
