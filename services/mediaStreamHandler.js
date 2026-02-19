@@ -92,7 +92,7 @@ module.exports = (connection) => {
             const session = await ai.live.connect({
                 model: modelName,
                 config: {
-                    responseModalities: ["AUDIO", "TEXT"],
+                    responseModalities: ["AUDIO"],
                     systemInstruction: { parts: [{ text: promptText }] },
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }
