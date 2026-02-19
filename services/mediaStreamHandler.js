@@ -38,19 +38,18 @@ module.exports = (connection) => {
 
         // Initial Configuration to match Twilio's Audio Format (mulaw 8000Hz)
         // We tell ElevenLabs that we want output in ulaw_8000 so we don't need to transcode
+        // Explicitly setting parameters as per documentation
         const initialConfig = {
             type: "conversation_initiation_client_data",
             conversation_config_override: {
                 agent: {
                     prompt: {
-                        first_message: "Aló, buenos días... ¿hablo con el encargado?" // Force first message here to be safe
+                        first_message: "Aló, buenos días... ¿hablo con el encargado?"
                     }
                 },
                 tts: {
                     // voice_id removed to respect Agent configuration in dashboard
-                    // OUTPUT FORMAT IS CRITICAL FOR TWILIO
-                    // Twilio uses mulaw 8000. ElevenLabs calls this 'ulaw_8000'
-                    output_format: "ulaw_8000"
+                    output_format: "ulaw_8000" // This is the correct enum
                 }
             }
         };
