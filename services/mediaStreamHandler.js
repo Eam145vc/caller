@@ -47,7 +47,7 @@ module.exports = (connection) => {
                     }
                 },
                 tts: {
-                    voice_id: "21m00Tcm4TlvDq8ikWAM", // Default Rachel, change if you want specific via code or leave agent default
+                    // voice_id removed to respect Agent configuration in dashboard
                     // OUTPUT FORMAT IS CRITICAL FOR TWILIO
                     // Twilio uses mulaw 8000. ElevenLabs calls this 'ulaw_8000'
                     output_format: "ulaw_8000"
