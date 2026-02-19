@@ -4,7 +4,7 @@ const db = require('../database/db');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = "AIzaSyAuDvX82Fpo6hdou2Izee7soS7uE7wNooo"; // Hardcoded for speed as requested
-const GEMINI_MODEL = "gemini-2.5-flash-native-audio-latest"; // Valid Native Audio Model
+const GEMINI_MODEL = "gemini-2.0-flash-exp"; // Standard Live Model
 
 // SYSTEM PROMPT FOR SOFIA (Colombian Persona)
 const SYSTEM_INSTRUCTION = `
@@ -40,9 +40,7 @@ module.exports = (connection) => {
     let leadId = null;
 
     // Connect to Gemini Multimodal Live API
-    // Doc: https://ai.google.dev/gemini-api/docs/multimodal-live
-    // Try v1beta endpoint providing potentially better stability/access validation
-    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
+    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
     console.log('Connecting to Gemini Multimodal Live API...');
 
     try {
@@ -75,7 +73,6 @@ module.exports = (connection) => {
                 }
             }
         };
-        geminiWs.send(JSON.stringify(setupMessage));
         geminiWs.send(JSON.stringify(setupMessage));
 
         // Output initial greeting audio? 
