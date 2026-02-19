@@ -31,9 +31,12 @@ module.exports = (connection) => {
 
     async function setupGemini() {
         try {
+            const modelName = GEMINI_MODEL.startsWith('models/') ? GEMINI_MODEL : `models/${GEMINI_MODEL}`;
+            console.log(`🚀 Connecting to Gemini Live with model: ${modelName}`);
+
             // SDK Live API implementation (Corrected for @google/genai Node.js SDK v1.42.0)
             liveSession = await ai.live.connect({
-                model: GEMINI_MODEL,
+                model: modelName,
                 config: {
                     responseModalities: ["AUDIO"],
                     systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
@@ -44,7 +47,15 @@ module.exports = (connection) => {
                 callbacks: {
                     onopen: () => console.log('✅ Gemini SDK Connection Open'),
                     onmessage: (message) => {
-                        // message is a LiveServerMessage
+                        // Log message type for debugging (ignore usageMetadata to reduce noise)
+                        if (!message.usageMetadata) {
+                            console.log('📬 Gemini Message Received:', Object.keys(message).filter(k => message[k]));
+                        }
+
+                        if (message.goAway) {
+                            console.warn("⚠️ Gemini sent goAway:", message.goAway);
+                        }
+
                         if (message.serverContent && message.serverContent.modelTurn) {
                             const parts = message.serverContent.modelTurn.parts;
                             for (const part of parts) {
@@ -64,8 +75,10 @@ module.exports = (connection) => {
                             }
                         }
                     },
-                    onerror: (err) => console.error("❌ Gemini SDK Error:", err),
-                    onclose: () => console.log("ℹ️ Gemini SDK Connection Closed")
+                    onerror: (err) => console.error("❌ Gemini SDK Error Callback:", err),
+                    onclose: (event) => {
+                        console.log(`ℹ️ Gemini SDK Connection Closed. Code: ${event?.code}, Reason: ${event?.reason}`);
+                    }
                 }
             });
 
@@ -78,7 +91,7 @@ module.exports = (connection) => {
             });
 
         } catch (err) {
-            console.error("❌ Gemini SDK Connection Error:", err);
+            console.error("❌ Gemini SDK Connection Error (catch):", err);
         }
     }
 
