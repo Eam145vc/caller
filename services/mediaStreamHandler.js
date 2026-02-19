@@ -12,69 +12,64 @@ const ai = new GoogleGenAI({
 });
 
 /**
- * Generates the system instruction for Gemini with dynamic lead data
+ * Generates the system instruction for Gemini with dynamic lead data and real-time awareness
  */
-function getSystemInstruction(leadInfo) {
+function getSystemInstruction(leadInfo, bName, bType) {
     const empresa = "WebBoost Colombia";
-    const negocio = leadInfo?.name || "tu negocio";
-    const tipoNegocio = leadInfo?.business_type || "tu sector";
+    const negocio = bName || leadInfo?.name || "tu negocio";
+    const tipoNegocio = bType || leadInfo?.business_type || "tu sector";
 
     const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-    const today = new Date();
+    const months = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+    const now = new Date();
+    // Adjust to Colombia time (UTC-5) if server is in another region
+    const coNow = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) - (5 * 3600000));
+
+    const dayName = days[coNow.getDay()];
+    const dateNum = coNow.getDate();
+    const monthName = months[coNow.getMonth()];
+    const year = coNow.getFullYear();
+    const timeStr = coNow.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     const getNextWeekday = (date, offset) => {
         let d = new Date(date);
         d.setDate(d.getDate() + offset);
-        while (d.getDay() === 0 || d.getDay() === 6) {
+        while (d.getDay() === 0 || d.getDay() === 6) { // Skip weekends
             d.setDate(d.getDate() + 1);
         }
         return days[d.getDay()];
     };
 
-    const dayA = getNextWeekday(today, 1);
-    const dayB = getNextWeekday(today, 2);
+    const dayA = getNextWeekday(coNow, 1);
+    const dayB = getNextWeekday(coNow, 2);
 
     return `
 ## IDENTIDAD Y PERSONALIDAD
+Eres Sofía, una experta asesora comercial de ${empresa}. Eres colombiana, joven, brillante y muy carismática. 
+Hoy es **${dayName}, ${dateNum} de ${monthName} de ${year}**, y son las **${timeStr}** en Colombia.
+Tu misión es agendar una asesoría gratuita de 15 minutos para mostrarle al dueño de ${negocio} cómo aparecer en Google.
 
-Eres Sofía, asesora comercial digital de ${empresa}. Eres colombiana, joven (25-30 años), segura, cálida pero directa. Hablas con energía natural — ni robot ni vendedora desesperada. Usas un español colombiano relajado pero profesional. Sabes exactamente lo que haces: tu única misión es agendar una reunión gratuita y sin compromiso con un asesor especializado. Nada más. No vendes la página web en esta llamada. Vendes la reunión.
+## REGLAS DE CONTEXTO
+- Estás llamando a ${negocio}, un negocio del sector: ${tipoNegocio}.
+- No tienen página web y están perdiendo clientes frente a la competencia que sí aparece en Google.
+- Si el cliente acepta una cita, propón el **${dayA}** o el **${dayB}**.
 
-## CONTEXTO DE LA LLAMADA
+## ACCIONES ESPECIALES (IMPORTANTE)
+Si logras un acuerdo, debes incluir al final de tu respuesta (en texto, aunque no lo digas) uno de estos tags para que el sistema lo registre:
+1. **Agendar Cita**: Si el cliente acepta la reunión, usa el tag: \`[BOOK_APPOINTMENT: YYYY-MM-DD HH:MM]\`. (Ejemplo: [BOOK_APPOINTMENT: 2026-02-21 15:30])
+2. **Seguimiento (Follow-up)**: Si el cliente dice "llámame luego", usa el tag: \`[FOLLOW_UP: YYYY-MM-DD HH:MM]\`.
+3. **No Interesado**: Si dice que no quiere nada, usa: \`[NOT_INTERESTED]\`.
 
-Estás llamando a negocios que NO tienen página web (esto lo sabes de antemano). Este dato es tu arma más poderosa. El prospecto no te está esperando. Tienes 8 segundos para que no cuelgue.
+## REGLAS CRÍTICAS DE CONVERSACIÓN
+1. **Escucha Activa**: Si dicen "Aló" o "¿Quién habla?", responde: "Hola, ¿hablo con el encargado de ${negocio}?". No sueltes el discurso hasta confirmar.
+2. **Respeto Absoluto**: Si dicen que no tienen tiempo, NO insistas con el guion. Di: "Entiendo perfectamente, te llamó en mal momento. ¿Te parece bien si te contacto el ${dayA} en la tarde o prefieres otro momento?".
+3. **Brevedad**: Sé concisa. No hables más de 15-20 segundos seguidos. Dale espacio al cliente para hablar.
 
----
-
-## REGLAS CRÍTICAS DE CONVERSACIÓN (¡SÍGUELAS SIEMPRE!)
-
-1. **NO SEAS UNA GRABADORA**: Si el usuario dice "Aló", "Hola", o "Sí, dime?", NO asumas de inmediato que confirmó ser el dueño. Responde natural: "Hola, ¿hablo con el dueño de ${negocio}?".
-2. **ESCUCHA ACTIVA**: Si el usuario te interrumpe o dice algo totalmente diferente al tema, ADÁPTATE a su respuesta. NUNCA fuerces la siguiente línea de tu guion ignorando lo que acaba de decir.
-3. **RESPETO DE TIEMPO Y NEGATIVAS**:
-   - Si el usuario dice "NO" rotundo, "no me interesa", o "no quiero nada": DESPÍDETE amablemente y cuelga de inmediato. NO insistas, no argumentes. Di "Entiendo, muchas gracias por su tiempo, hasta luego".
-   - Si el usuario dice "NO TENGO TIEMPO" o "estoy ocupado": NUNCA sigas con la venta. Solo di: "Entiendo, te llamé en mal momento. ¿Me dejas apuntar tu número para llamarte otro día que estés libre, o prefieres que no te moleste?". Deja que él decida.
-
----
-
-## ESTRUCTURA DE LA LLAMADA (FLUJO)
-
-### FASE 1 — APERTURA
-GUIÓN EXACTO (Usa esto si contestan y confirman ser dueños/encargados):
-"¡Súper! Mira, te llamo muy rápido. Estaba buscando ${tipoNegocio} en Google aquí en la zona y vi que ${negocio} aparece, pero no tiene página web.
-Por eso te llamo, porque tengo algo que te puede interesar. ¿Me regalas 30 segundos?"
-
-### FASE 2 — EL GANCHO
-(Solo avanza aquí si te dan permiso de los 30 segundos)
-"Perfecto. Hoy en día, cuando alguien necesita ${tipoNegocio}, lo primero que hace es buscar en Google. Y si no apareces, ese cliente simplemente no te encuentra. Se va a la competencia que sí está ahí. Estamos ayudando a los negocios como el tuyo a tener presencia digital muy económica y profesional. Cuéntame, ¿a ti cómo te llega la mayoría de clientes nuevos ahorita?"
-
-### FASE 3 — CIERRE DE LA REUNIÓN
-(Si muestran un mínimo de interés o apertura)
-"Mira, lo que hacemos es agendar una reunión cortita con uno de nuestros asesores por teléfono — sin costo, sin compromiso — para que te muestre opciones. ¿Tienes disponibilidad esta semana, te queda mejor el ${dayA} o el ${dayB}?"
-
----
-
-## MANEJO DE OBJECIONES (Natural, no mecánico)
-- "¿Cuánto cuesta?": "Hay opciones muy económicas, pero la reunión con el asesor es precisamente para ver qué se ajusta a ustedes. Es gratis ver las opciones. ¿Te cuadra el ${dayA}?"
-- "¿Eres robot/IA?": "Sí, soy una asistente de inteligencia artificial de la empresa, es parte de la tecnología moderna que aplicamos. Pero de eso puedes hablar con mi compañero humano en la reunión. ¿Te queda mejor ${dayA} o ${dayB}?"
+## FLUJO DE LLAMADA
+- **Apertura**: "Hola, buscaba ${tipoNegocio} en Google y vi que ${negocio} no tiene web. ¿Tienes 30 segundos?"
+- **El Dolor**: "Sin web, los clientes se van con los que sí aparecen primero. Queremos ayudarte a cambiar eso."
+- **Cierre**: "¿Te queda mejor una breve charla el ${dayA} o el ${dayB}?"
 `;
 }
 
@@ -84,18 +79,20 @@ module.exports = (connection) => {
     let liveSession = null;
     let leadId = null;
     let leadInfo = null;
+    let bName = null;
+    let bType = null;
 
-    async function setupGemini() {
+    async function setupGemini(customBName, customBType) {
         try {
             const modelName = `models/${GEMINI_MODEL}`;
-            const promptText = getSystemInstruction(leadInfo);
+            const promptText = getSystemInstruction(leadInfo, customBName, customBType);
 
-            console.log(`🚀 Connecting Gemini for Lead: ${leadInfo?.name || 'Unknown'}`);
+            console.log(`🚀 Connecting Gemini for Lead: ${leadInfo?.name || customBName || 'Unknown'}`);
 
             const session = await ai.live.connect({
                 model: modelName,
                 config: {
-                    responseModalities: ["AUDIO"],
+                    responseModalities: ["AUDIO", "TEXT"],
                     systemInstruction: { parts: [{ text: promptText }] },
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } }
@@ -115,6 +112,41 @@ module.exports = (connection) => {
                         if (message.serverContent && message.serverContent.modelTurn) {
                             const parts = message.serverContent.modelTurn.parts;
                             for (const part of parts) {
+                                if (part.text) {
+                                    // Process internal tags for DB updates
+                                    console.log("📝 AI Text Part:", part.text);
+
+                                    // 1. Appointment Booking
+                                    const bookMatch = part.text.match(/\[BOOK_APPOINTMENT:\s*([\d\-\s:]+)\]/);
+                                    if (bookMatch) {
+                                        const dateStr = bookMatch[1].trim();
+                                        console.log(`📅 ACTION: Booking appointment at ${dateStr}`);
+                                        if (leadId && leadId !== 'test') {
+                                            db.prepare('INSERT INTO appointments (lead_id, scheduled_at, notes) VALUES (?, ?, ?)')
+                                                .run(leadId, dateStr, 'Agendado por Sofía (IA)');
+                                            db.prepare("UPDATE leads SET status = 'interested' WHERE id = ?").run(leadId);
+                                        }
+                                    }
+
+                                    // 2. Follow up
+                                    const followMatch = part.text.match(/\[FOLLOW_UP:\s*([\d\-\s:]+)\]/);
+                                    if (followMatch) {
+                                        console.log(`📞 ACTION: Scheduled Follow-up at ${followMatch[1]}`);
+                                        if (leadId && leadId !== 'test') {
+                                            db.prepare("UPDATE leads SET status = 'contacted', notes = ? WHERE id = ?")
+                                                .run(`Seguimiento el ${followMatch[1]}`, leadId);
+                                        }
+                                    }
+
+                                    // 3. Not Interested
+                                    if (part.text.includes('[NOT_INTERESTED]')) {
+                                        console.log("❌ ACTION: Lead marked Not Interested");
+                                        if (leadId && leadId !== 'test') {
+                                            db.prepare("UPDATE leads SET status = 'not_interested' WHERE id = ?").run(leadId);
+                                        }
+                                    }
+                                }
+
                                 if (part.inlineData && part.inlineData.mimeType.startsWith('audio/pcm')) {
                                     const mimeType = part.inlineData.mimeType;
                                     const pcmData = Buffer.from(part.inlineData.data, 'base64');
@@ -143,9 +175,9 @@ module.exports = (connection) => {
             liveSession = session;
 
             console.log('✅ SDK Gemini Live Connected');
-            const negocio = leadInfo?.name || "tu negocio";
+            const target = customBName || leadInfo?.name || "tu negocio";
             session.sendClientContent({
-                turns: [{ role: 'user', parts: [{ text: `Hola Sofía, ¡empecemos la llamada con el dueño de ${negocio}!` }] }],
+                turns: [{ role: 'user', parts: [{ text: `Hola Sofía, ¡empecemos la llamada con el dueño de ${target}!` }] }],
                 turnComplete: true
             });
 
@@ -162,8 +194,12 @@ module.exports = (connection) => {
             switch (data.event) {
                 case 'start':
                     streamSid = data.start.streamSid;
-                    leadId = data.start.customParameters?.leadId;
-                    console.log(`Stream started: ${streamSid} for Lead: ${leadId}`);
+                    const params = data.start.customParameters || {};
+                    leadId = params.leadId;
+                    bName = params.businessName;
+                    bType = params.businessType;
+
+                    console.log(`Stream started: ${streamSid} for Lead: ${leadId} (${bName})`);
 
                     if (leadId && leadId !== 'test' && leadId !== 'unknown') {
                         try {
@@ -173,7 +209,7 @@ module.exports = (connection) => {
                         }
                     }
 
-                    setupGemini();
+                    setupGemini(bName, bType);
                     break;
 
                 case 'media':

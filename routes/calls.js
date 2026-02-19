@@ -28,7 +28,7 @@ router.post('/calls/start', async (req, res) => {
 // START NEW TEST ENDPOINT
 // Initiate a test call to a manual number
 router.post('/calls/test', async (req, res) => {
-    const { phoneNumber } = req.body;
+    const { phoneNumber, businessName, businessType } = req.body;
 
     if (!phoneNumber) {
         return res.status(400).json({ error: "Missing phoneNumber" });
@@ -43,14 +43,17 @@ router.post('/calls/test', async (req, res) => {
     }
 
     try {
-        // Create a temporary "lead" in memory concept or just pass ID 0 to indicate test
-        // But the webhook needs to know. Let's redirect to the same voice webhook 
-        // but pass a flag or a dummy ID.
+        console.log(`Initiating TEST call to ${phoneNumber} for ${businessName} (${businessType})...`);
 
-        console.log(`Initiating TEST call to ${phoneNumber}...`);
+        // Pass business info through query params to the webhook
+        const queryParams = new URLSearchParams({
+            leadId: 'test',
+            bName: businessName || 'Mi Negocio',
+            bType: businessType || 'Negocio'
+        }).toString();
 
         const call = await client.calls.create({
-            url: `${publicUrl}/api/twilio/voice?leadId=test`, // leadId=test signals it's a test
+            url: `${publicUrl}/api/twilio/voice?${queryParams}`,
             to: phoneNumber,
             from: process.env.TWILIO_PHONE_NUMBER
         });
@@ -67,7 +70,7 @@ router.post('/calls/test', async (req, res) => {
 
 // Twilio Voice Webhook (TwiML)
 router.post('/twilio/voice', (req, res) => {
-    const leadId = req.query.leadId;
+    const { leadId, bName, bType } = req.query;
     const response = new VoiceResponse();
     const connect = response.connect();
 
@@ -80,6 +83,13 @@ router.post('/twilio/voice', (req, res) => {
         name: 'leadId',
         value: leadId || 'unknown'
     });
+
+    if (bName) {
+        stream.parameter({ name: 'businessName', value: bName });
+    }
+    if (bType) {
+        stream.parameter({ name: 'businessType', value: bType });
+    }
 
     res.type('text/xml');
     res.send(response.toString());

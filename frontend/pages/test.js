@@ -3,7 +3,22 @@ import Layout from '../components/Layout';
 
 export default function TestCall() {
     const [phone, setPhone] = useState('');
+    const [businessName, setBusinessName] = useState('Mi Negocio Test');
+    const [businessType, setBusinessType] = useState('Restaurante');
     const [status, setStatus] = useState('');
+
+    const businessTypes = [
+        "Restaurante",
+        "Peluquería",
+        "Clínica Veterinaria",
+        "Odontología",
+        "Taller Mecánico",
+        "Inmobiliaria",
+        "Ferretería",
+        "Gimnasio",
+        "Panadería",
+        "Consultorio Médico"
+    ];
 
     const handleTestCall = async (e) => {
         e.preventDefault();
@@ -14,12 +29,16 @@ export default function TestCall() {
             const res = await fetch(`${apiUrl}/api/calls/test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phoneNumber: phone })
+                body: JSON.stringify({
+                    phoneNumber: phone,
+                    businessName: businessName,
+                    businessType: businessType
+                })
             });
 
             const data = await res.json();
             if (data.success) {
-                setStatus(`Calling ${phone}... check your phone!`);
+                setStatus(`Calling ${phone}... check your phone! simulating ${businessName} (${businessType})`);
             } else {
                 setStatus(`Error: ${data.error}`);
             }
@@ -35,12 +54,36 @@ export default function TestCall() {
             <div className="card" style={{ marginTop: '2rem', maxWidth: '500px' }}>
                 <h3>Simulate Cold Call</h3>
                 <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                    Enter your own phone number (with country code, e.g., +57...) to test the AI voice agent.
+                    Configure the business details and enter your phone number to test Sofía.
                 </p>
 
                 <form onSubmit={handleTestCall}>
                     <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Phone Number</label>
+                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Business Name</label>
+                        <input
+                            type="text"
+                            placeholder="Ej: Pizzería Roma"
+                            value={businessName}
+                            onChange={e => setBusinessName(e.target.value)}
+                            required
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Business Type</label>
+                        <select
+                            value={businessType}
+                            onChange={e => setBusinessType(e.target.value)}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--text-primary)' }}
+                        >
+                            {businessTypes.map(type => (
+                                <option key={type} value={type}>{type}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Your Phone Number</label>
                         <input
                             type="tel"
                             placeholder="+57 300 123 4567"
@@ -50,7 +93,7 @@ export default function TestCall() {
                         />
                     </div>
 
-                    <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
+                    <button type="submit" className="btn btn-primary" style={{ width: '100%', fontSize: '1.1rem' }}>
                         📞 Call Me Now
                     </button>
                 </form>
