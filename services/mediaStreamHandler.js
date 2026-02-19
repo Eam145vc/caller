@@ -124,7 +124,8 @@ module.exports = (connection) => {
 
             console.log(`🚀 Connecting Gemini for Lead: ${leadInfo?.name || 'Unknown'}`);
 
-            liveSession = await ai.live.connect({
+            // Assign the connect promise to liveSession first to avoid null reference in callbacks
+            const session = await ai.live.connect({
                 model: modelName,
                 config: {
                     responseModalities: ["AUDIO"],
@@ -136,9 +137,9 @@ module.exports = (connection) => {
                 callbacks: {
                     onopen: () => {
                         console.log('✅ Gemini SDK Connection Open');
-                        // Start greeting once connected
+                        // Use the local 'session' variable to be stay safe from race conditions
                         const negocio = leadInfo?.name || "tu negocio";
-                        liveSession.sendClientContent({
+                        session.sendClientContent({
                             turns: [{ role: 'user', parts: [{ text: `Hola Sofía, ¡empecemos la llamada con el dueño de ${negocio}!` }] }],
                             turnComplete: true
                         });
@@ -170,6 +171,8 @@ module.exports = (connection) => {
                     onclose: (event) => console.log(`ℹ️ Gemini SDK Connection Closed. Code: ${event?.code}`)
                 }
             });
+
+            liveSession = session;
         } catch (err) {
             console.error("❌ Gemini SDK Connection Error:", err);
         }
