@@ -117,6 +117,27 @@ module.exports = (connection) => {
     let liveSession = null;
     let leadId = null;
     let leadInfo = null;
+    let noiseInterval = null;
+
+    // Function to keep noise alive even when AI is silent
+    function startBackgroundNoise() {
+        if (noiseInterval) clearInterval(noiseInterval);
+
+        noiseInterval = setInterval(() => {
+            if (streamSid && twilioWs.readyState === WebSocket.OPEN && noiseBuffer) {
+                // Generate 100ms of noise (8000 samples * 0.1s = 800 samples)
+                const silence = Buffer.alloc(1600); // 800 samples * 2 bytes (16-bit)
+                const mulawNoise = processOutputAudio(silence, 8000); // This will add noise to silence
+
+                const payload = {
+                    event: 'media',
+                    streamSid: streamSid,
+                    media: { payload: mulawNoise.toString('base64') }
+                };
+                twilioWs.send(JSON.stringify(payload));
+            }
+        }, 100); // Send every 100ms
+    }
 
     async function setupGemini() {
         try {
@@ -201,6 +222,9 @@ module.exports = (connection) => {
                         }
                     }
 
+                    // Start noise loop immediately to fill dead air
+                    startBackgroundNoise();
+
                     setupGemini();
                     break;
 
@@ -216,11 +240,17 @@ module.exports = (connection) => {
 
                 case 'stop':
                     console.log('Stream stopped');
+                    if (noiseInterval) clearInterval(noiseInterval);
                     break;
             }
         } catch (e) {
             console.error("Error processing Twilio message:", e);
         }
+    });
+
+    twilioWs.on('close', () => {
+        if (noiseInterval) clearInterval(noiseInterval);
+        console.log('Twilio connection closed');
     });
 };
 
@@ -274,12 +304,12 @@ function processOutputAudio(pcmBuffer, inputRate) {
 
     for (let i = 0; i < outputSamples; i++) {
         const sourceIndex = Math.floor(i * ratio);
-        let sample = samples[sourceIndex];
+        let sample = (sourceIndex < samples.length) ? samples[sourceIndex] : 0;
 
         // Mix with background noise if available
         if (noiseBuffer) {
             const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
-            // Mix: Voice (80%) + Noise (20%) - Increased noise slightly
+            // Mix: Voice (80%) + Noise (20%)
             sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.2));
             noiseIndex++;
         }
