@@ -41,8 +41,8 @@ module.exports = (connection) => {
 
     // Connect to Gemini Multimodal Live API
     // Doc: https://ai.google.dev/gemini-api/docs/multimodal-live
-    // Try v1alpha endpoint for Bidi which is required for native audio models
-    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
+    // Try v1beta endpoint providing potentially better stability/access validation
+    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${GEMINI_API_KEY}`;
     console.log('Connecting to Gemini Multimodal Live API...');
 
     try {
