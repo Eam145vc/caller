@@ -41,11 +41,17 @@ module.exports = (connection) => {
         const initialConfig = {
             type: "conversation_initiation_client_data",
             conversation_config_override: {
-                // If supported, requested format. Otherwise defaults to pcm_16000
-                // For now, let's try WITHOUT forcing format and see if it works, 
-                // or if we need to transcode. 
-                // Reviewing docs: "agent_response" event has "audio_event" with "audio_base_64".
-                // If the agent is set to 8kHz in dashboard, it should match.
+                agent: {
+                    prompt: {
+                        first_message: "Aló, buenos días... ¿hablo con el encargado?" // Force first message here to be safe
+                    }
+                },
+                tts: {
+                    voice_id: "21m00Tcm4TlvDq8ikWAM", // Default Rachel, change if you want specific via code or leave agent default
+                    // OUTPUT FORMAT IS CRITICAL FOR TWILIO
+                    // Twilio uses mulaw 8000. ElevenLabs calls this 'ulaw_8000'
+                    output_format: "ulaw_8000"
+                }
             }
         };
         elevenLabsWs.send(JSON.stringify(initialConfig));
