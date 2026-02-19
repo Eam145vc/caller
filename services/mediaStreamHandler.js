@@ -115,6 +115,27 @@ module.exports = (connection) => {
     let liveSession = null;
     let leadId = null;
     let leadInfo = null;
+    let noiseInterval = null;
+
+    // Function to keep noise alive even when AI is silent
+    function startBackgroundNoise() {
+        if (noiseInterval) clearInterval(noiseInterval);
+
+        noiseInterval = setInterval(() => {
+            if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
+                // Generate 100ms of noise (8000 samples * 0.1s = 800 samples)
+                const silence = Buffer.alloc(1600); // 800 samples * 2 bytes (16-bit)
+                const mulawNoise = processOutputAudio(silence, 8000);
+
+                const payload = {
+                    event: 'media',
+                    streamSid: streamSid,
+                    media: { payload: mulawNoise.toString('base64') }
+                };
+                twilioWs.send(JSON.stringify(payload));
+            }
+        }, 100); // Send every 100ms
+    }
 
     async function setupGemini() {
         try {
@@ -197,6 +218,7 @@ module.exports = (connection) => {
                         }
                     }
 
+                    startBackgroundNoise();
                     setupGemini();
                     break;
 
@@ -212,6 +234,7 @@ module.exports = (connection) => {
 
                 case 'stop':
                     console.log('Stream stopped');
+                    if (noiseInterval) clearInterval(noiseInterval);
                     break;
             }
         } catch (e) {
@@ -221,6 +244,7 @@ module.exports = (connection) => {
 
     twilioWs.on('close', () => {
         console.log('Twilio connection closed');
+        if (noiseInterval) clearInterval(noiseInterval);
     });
 };
 
@@ -241,6 +265,15 @@ function processInputAudio(mulawBuffer) {
     return Buffer.from(pcm16.buffer);
 }
 
+// --- NOISE SETUP ---
+// Generate 10 seconds of soft white noise (comfort noise)
+const noiseBuffer = Buffer.alloc(16000 * 2 * 10);
+for (let i = 0; i < noiseBuffer.length; i += 2) {
+    const noise = (Math.random() * 2 - 1) * 350; // Soft volume white noise
+    noiseBuffer.writeInt16LE(noise, i);
+}
+let noiseIndex = 0;
+
 function processOutputAudio(pcmBuffer, inputRate) {
     const samples = new Int16Array(pcmBuffer.buffer, pcmBuffer.byteOffset, pcmBuffer.length / 2);
     const ratio = inputRate / 8000;
@@ -251,6 +284,12 @@ function processOutputAudio(pcmBuffer, inputRate) {
     for (let i = 0; i < outputSamples; i++) {
         const sourceIndex = Math.floor(i * ratio);
         let sample = (sourceIndex < samples.length) ? samples[sourceIndex] : 0;
+
+        // Add comfort noise
+        const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
+        sample = Math.min(32767, Math.max(-32768, sample + noiseSample));
+        noiseIndex++;
+
         mulaw[i] = linearToMuLaw(sample);
     }
     return mulaw;
