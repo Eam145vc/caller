@@ -256,7 +256,7 @@ try {
         // Fallback: Generate simple 16kHz low-level chatter/noise
         noiseBuffer = Buffer.alloc(16000 * 2 * 10); // 10 seconds
         for (let i = 0; i < noiseBuffer.length; i += 2) {
-            const noise = (Math.random() * 2 - 1) * 300; // Low volume noise
+            const noise = (Math.random() * 2 - 1) * 1200; // MUCH Louder noise for testing
             noiseBuffer.writeInt16LE(Math.floor(noise), i);
         }
     }
@@ -279,8 +279,8 @@ function processOutputAudio(pcmBuffer, inputRate) {
         // Mix with background noise if available
         if (noiseBuffer) {
             const noiseSample = noiseBuffer.readInt16LE((noiseIndex * 2) % noiseBuffer.length);
-            // Mix: Voice (90%) + Noise (10%)
-            sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.1));
+            // Mix: Voice (80%) + Noise (20%) - Increased noise slightly
+            sample = Math.min(32767, Math.max(-32768, sample + noiseSample * 0.2));
             noiseIndex++;
         }
 
