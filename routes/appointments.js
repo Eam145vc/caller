@@ -1,8 +1,23 @@
 const express = require('express');
 const router = express.Router();
 
-router.get('/test-appointments', (req, res) => {
-    res.json({ message: 'Appointments route placeholder' });
+const db = require('../database/db');
+
+router.get('/appointments', async (req, res) => {
+    try {
+        const appointments = await Promise.resolve(db.prepare(`
+            SELECT a.id, a.scheduled_at, a.notes, a.status as apt_status, 
+                   l.name as lead_name, l.business_type
+            FROM appointments a
+            JOIN leads l ON a.lead_id = l.id
+            ORDER BY a.created_at DESC
+        `).all());
+
+        res.json(appointments || []);
+    } catch (e) {
+        console.error("Error fetching appointments:", e);
+        res.status(500).json({ error: 'Database error' });
+    }
 });
 
 module.exports = router;

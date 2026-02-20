@@ -32,11 +32,14 @@ function getSystemInstruction(leadInfo, bName, bType) {
     const year = coNow.getFullYear();
     const timeStr = coNow.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const getNextWeekday = (date, offset) => {
+    const getNextWeekday = (date, offsetDays) => {
         let d = new Date(date);
-        d.setDate(d.getDate() + offset);
-        while (d.getDay() === 0 || d.getDay() === 6) { // Skip weekends
+        let added = 0;
+        while (added < offsetDays) {
             d.setDate(d.getDate() + 1);
+            if (d.getDay() !== 0 && d.getDay() !== 6) { // Not Sunday or Saturday
+                added++;
+            }
         }
         return days[d.getDay()];
     };
