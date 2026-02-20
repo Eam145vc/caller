@@ -152,24 +152,24 @@ module.exports = (connection) => {
                                 switch (call.name) {
                                     case 'book_appointment':
                                         if (leadId && leadId !== 'test') {
-                                            db.prepare('INSERT INTO appointments (lead_id, scheduled_at, notes) VALUES (?, ?, ?)')
-                                                .run(leadId, call.args.scheduled_at, 'Agendado por Sofía (IA via Tool)');
-                                            db.prepare("UPDATE leads SET status = 'interested' WHERE id = ?").run(leadId);
+                                            Promise.resolve(db.prepare('INSERT INTO appointments (lead_id, scheduled_at, notes) VALUES (?, ?, ?)')
+                                                .run(leadId, call.args.scheduled_at, 'Agendado por Sofía (IA via Tool)')).catch(console.error);
+                                            Promise.resolve(db.prepare("UPDATE leads SET status = 'interested' WHERE id = ?").run(leadId)).catch(console.error);
                                         }
                                         responses.push({ name: call.name, id: call.id, response: { success: true, message: "Cita agendada" } });
                                         break;
 
                                     case 'schedule_follow_up':
                                         if (leadId && leadId !== 'test') {
-                                            db.prepare("UPDATE leads SET status = 'contacted', notes = ? WHERE id = ?")
-                                                .run(`Seguimiento el ${call.args.scheduled_at}`, leadId);
+                                            Promise.resolve(db.prepare("UPDATE leads SET status = 'contacted', notes = ? WHERE id = ?")
+                                                .run(`Seguimiento el ${call.args.scheduled_at}`, leadId)).catch(console.error);
                                         }
                                         responses.push({ name: call.name, id: call.id, response: { success: true, message: "Seguimiento programado" } });
                                         break;
 
                                     case 'mark_not_interested':
                                         if (leadId && leadId !== 'test') {
-                                            db.prepare("UPDATE leads SET status = 'not_interested' WHERE id = ?").run(leadId);
+                                            Promise.resolve(db.prepare("UPDATE leads SET status = 'not_interested' WHERE id = ?").run(leadId)).catch(console.error);
                                         }
                                         responses.push({ name: call.name, id: call.id, response: { success: true, message: "Marcado como no interesado" } });
                                         break;
