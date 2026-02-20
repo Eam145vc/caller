@@ -46,11 +46,7 @@ if (process.env.DATABASE_URL) {
     // Note: Better to do this via a migration, but for now we'll check if tables exist
     const initPostgres = async () => {
         try {
-            // Soft-patch: Drop table since it's empty anyway, and recreate to guarantee TEXT column
-            try {
-                await db.query("DROP TABLE IF EXISTS appointments;");
-            } catch (e) { /* Ignore */ }
-
+            // Ensure schema is updated
             const schema = fs.readFileSync(path.join(__dirname, 'schema_postgres.sql'), 'utf8');
             await db.query(schema);
 
