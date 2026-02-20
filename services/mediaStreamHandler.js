@@ -60,8 +60,8 @@ Tu misión es agendar una asesoría gratuita de 15 minutos para mostrarle al due
 
 ## ACCIONES ESPECIALES (HERRAMIENTAS DEL SISTEMA)
 ¡MUY IMPORTANTE! Tienes herramientas de sistema (\`tools\`) que DEBES ejecutar técnicamente cuando el usuario acepte. NO debes solo decir en voz alta "te agendé la cita", debes invocar la función de código por debajo.
-1. **Agendar Cita**: Si el cliente acepta la reunión, DEBES INVOCAR LA HERRAMIENTA TÉCNICA \`book_appointment(scheduled_at)\`. (Si no usas la herramienta, la cita se perderá).
-2. **Seguimiento (Follow-up)**: Si el cliente dice "llámame luego", INVOCA LA HERRAMIENTA \`schedule_follow_up(scheduled_at)\`.
+1. **Agendar Cita**: Si el cliente acepta la reunión, DEBES INVOCAR LA HERRAMIENTA TÉCNICA \`book_appointment(scheduled_at)\`. **Inmediatamente después de usar la herramienta, confírmale al cliente de viva voz que la cita quedó registrada y despídete amablemente para cerrar la llamada.**
+2. **Seguimiento (Follow-up)**: Si el cliente dice "llámame luego", INVOCA LA HERRAMIENTA \`schedule_follow_up(scheduled_at)\` y despídete confirmando cuándo volverás a llamar.
 3. **No Interesado**: Si rechaza rotundamente, INVOCA LA HERRAMIENTA \`mark_not_interested()\`.
 
 ## MANEJO DE RUIDO Y SILENCIO
@@ -198,9 +198,9 @@ module.exports = (connection) => {
                                             const { sendWhatsAppMessage } = require('./whatsappService');
                                             const cliente = leadInfo.name || 'amigo';
                                             const msg = `¡Hola ${cliente}! Soy Sofía de WebBoost Colombia. Confirmo nuestra asesoría gratuita programada para el ${time}. ¡Nos vemos pronto!`;
-                                            sendWhatsAppMessage(leadInfo.phone, msg).catch(console.error);
+                                            sendWhatsAppMessage(leadInfo.phone, msg).catch(err => console.log("WhatsApp skip:", err.message));
                                         }
-                                        responses.push({ name: call.name, id: call.id, response: { success: true, message: "Cita agendada" } });
+                                        responses.push({ name: call.name, id: call.id, response: { success: true, message: "Cita guardada en base de datos. Ahora confirma al cliente por voz y despídete." } });
                                         break;
 
                                     case 'schedule_follow_up':
@@ -224,10 +224,14 @@ module.exports = (connection) => {
                                 }
                             }
 
-                            if (responses.length > 0) {
-                                session.sendClientContent({
-                                    toolResponses: { functionResponses: responses }
-                                });
+                            if (responses.length > 0 && liveSession) {
+                                try {
+                                    session.sendClientContent({
+                                        toolResponses: { functionResponses: responses }
+                                    });
+                                } catch (e) {
+                                    console.error("Error sending tool response:", e);
+                                }
                             }
                         }
 
@@ -267,14 +271,16 @@ module.exports = (connection) => {
             // Start Silence Monitor (Check every 2 seconds)
             silenceInterval = setInterval(() => {
                 const idleTime = Date.now() - lastActivityTime;
-                if (idleTime > 12000) { // 12 seconds of total silence
+                if (idleTime > 7000) { // 7 seconds of total silence
                     console.log("⏳ Silence detected, nudging AI...");
                     lastActivityTime = Date.now();
                     if (liveSession) {
-                        liveSession.sendClientContent({
-                            turns: [{ role: 'user', parts: [{ text: "(El cliente está en silencio, retoma la palabra amablemente para no perder la conexión)" }] }],
-                            turnComplete: true
-                        });
+                        try {
+                            liveSession.sendClientContent({
+                                turns: [{ role: 'user', parts: [{ text: "(El cliente está en silencio o la respuesta es muy breve, retoma la palabra para no perder la conexión)" }] }],
+                                turnComplete: true
+                            });
+                        } catch (e) { }
                     }
                 }
             }, 2000);
