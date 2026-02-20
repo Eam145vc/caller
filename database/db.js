@@ -43,13 +43,13 @@ if (process.env.DATABASE_URL) {
     // Note: Better to do this via a migration, but for now we'll check if tables exist
     const initPostgres = async () => {
         try {
+            // Soft-patch: Drop table since it's empty anyway, and recreate to guarantee TEXT column
+            try {
+                await db.query("DROP TABLE IF EXISTS appointments;");
+            } catch (e) { /* Ignore */ }
+
             const schema = fs.readFileSync(path.join(__dirname, 'schema_postgres.sql'), 'utf8');
             await db.query(schema);
-
-            // Soft-patch: Ensure existing timestamp column is converted to text to avoid AI format errors
-            try {
-                await db.query("ALTER TABLE appointments ALTER COLUMN scheduled_at TYPE TEXT;");
-            } catch (e) { /* Ignore if it's already text */ }
 
             console.log("✅ PostgreSQL Schema Synchronized");
         } catch (err) {
