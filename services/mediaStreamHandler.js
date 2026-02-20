@@ -172,17 +172,27 @@ module.exports = (connection) => {
                                 switch (call.name) {
                                     case 'book_appointment':
                                         if (leadId && leadId !== 'test') {
+                                            const time = String(call.args.scheduled_at || 'Por definir');
                                             Promise.resolve(db.prepare('INSERT INTO appointments (lead_id, scheduled_at, notes) VALUES (?, ?, ?)')
-                                                .run(leadId, call.args.scheduled_at, 'Agendado por Sofía (IA via Tool)')).catch(console.error);
+                                                .run(leadId, time, 'Agendado por Sofía (IA via Tool)')).catch(console.error);
                                             Promise.resolve(db.prepare("UPDATE leads SET status = 'interested' WHERE id = ?").run(leadId)).catch(console.error);
+
+                                            // Enviar confirmación inmediata de WhatsApp (si hay teléfono)
+                                            if (leadInfo && leadInfo.phone) {
+                                                const { sendWhatsAppMessage } = require('./whatsappService');
+                                                const cliente = leadInfo.name || 'amigo';
+                                                const msg = `¡Hola ${cliente}! Soy Sofía de WebBoost Colombia. Confirmo nuestra asesoría gratuita programada para el ${time}. ¡Nos vemos pronto!`;
+                                                sendWhatsAppMessage(leadInfo.phone, msg).catch(console.error);
+                                            }
                                         }
-                                        responses.push({ name: call.name, id: call.id, response: { success: true, message: "Cita agendada" } });
+                                        responses.push({ name: call.name, id: call.id, response: { success: true, message: "Cita agendada y confirmada" } });
                                         break;
 
                                     case 'schedule_follow_up':
                                         if (leadId && leadId !== 'test') {
+                                            const time2 = String(call.args.scheduled_at || 'Pronto');
                                             Promise.resolve(db.prepare("UPDATE leads SET status = 'contacted', notes = ? WHERE id = ?")
-                                                .run(`Seguimiento el ${call.args.scheduled_at}`, leadId)).catch(console.error);
+                                                .run(`Seguimiento el ${time2}`, leadId)).catch(console.error);
                                         }
                                         responses.push({ name: call.name, id: call.id, response: { success: true, message: "Seguimiento programado" } });
                                         break;

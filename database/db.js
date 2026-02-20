@@ -45,6 +45,12 @@ if (process.env.DATABASE_URL) {
         try {
             const schema = fs.readFileSync(path.join(__dirname, 'schema_postgres.sql'), 'utf8');
             await db.query(schema);
+
+            // Soft-patch: Ensure existing timestamp column is converted to text to avoid AI format errors
+            try {
+                await db.query("ALTER TABLE appointments ALTER COLUMN scheduled_at TYPE TEXT;");
+            } catch (e) { /* Ignore if it's already text */ }
+
             console.log("✅ PostgreSQL Schema Synchronized");
         } catch (err) {
             console.error("❌ Error initializing PostgreSQL:", err);

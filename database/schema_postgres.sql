@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS calls (
 CREATE TABLE IF NOT EXISTS appointments (
     id SERIAL PRIMARY KEY,
     lead_id INTEGER REFERENCES leads(id),
-    scheduled_at TIMESTAMP NOT NULL,
+    scheduled_at TEXT NOT NULL,
     status TEXT DEFAULT 'scheduled',
     notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
