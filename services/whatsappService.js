@@ -19,8 +19,8 @@ async function sendWhatsAppMessage(to, message, instanceName = EVOLUTION_DEFAULT
         return;
     }
 
-    // Evolution API espera el número con el código de país pero normalmente sin el '+' 
-    const toFormatted = to.replace('+', '');
+    // Limpiar el número de cualquier carácter que no sea dígito (espacios, +, -, etc)
+    const toFormatted = to.replace(/\D/g, '');
 
     try {
         const url = `${EVOLUTION_API_URL}/message/sendText/${instanceName}`;
@@ -33,14 +33,9 @@ async function sendWhatsAppMessage(to, message, instanceName = EVOLUTION_DEFAULT
             },
             body: JSON.stringify({
                 number: toFormatted,
-                options: {
-                    delay: 1200, // 1.2 segundos de delay artificial simulando humano escribiendo
-                    presence: "composing", // Muestra "escribiendo..." en el chat del destino
-                    linkPreview: false // Evita previsualizaciones que puedan ralentizar el envío masivo
-                },
-                textMessage: {
-                    text: message
-                }
+                text: message,
+                delay: 1200,
+                linkPreview: false
             })
         });
 
