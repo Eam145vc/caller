@@ -4,7 +4,7 @@ const db = require('../database/db');
 
 // GEMINI CONFIGURATION
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
+const GEMINI_MODEL = "gemini-2.0-flash-exp";
 
 const ai = new GoogleGenAI({
     apiKey: GEMINI_API_KEY,
