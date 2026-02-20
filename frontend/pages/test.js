@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Layout from '../components/Layout';
 
 export default function TestCall() {
-    const [phone, setPhone] = useState('');
+    const [phone, setPhone] = useState('+573176165851');
     const [businessName, setBusinessName] = useState('Mi Negocio Test');
     const [businessType, setBusinessType] = useState('Restaurante');
     const [status, setStatus] = useState('');
@@ -25,12 +25,16 @@ export default function TestCall() {
         setStatus('Initiating call...');
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+            let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+            if (apiUrl && !apiUrl.startsWith('http')) {
+                apiUrl = `https://${apiUrl}`; // Fixes ERR_NAME_NOT_RESOLVED if Vercel env var is just a raw domain
+            }
+
             const res = await fetch(`${apiUrl}/api/calls/test`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    phoneNumber: phone,
+                    phoneNumber: phone || '+573176165851', // Hardcoded as requested
                     businessName: businessName,
                     businessType: businessType
                 })
