@@ -7,9 +7,10 @@ router.get('/appointments', async (req, res) => {
     try {
         const appointments = await Promise.resolve(db.prepare(`
             SELECT a.id, a.scheduled_at, a.notes, a.status as apt_status, 
-                   l.name as lead_name, l.business_type
+                   COALESCE(l.name, 'Usuario Test/Desconocido') as lead_name, 
+                   COALESCE(l.business_type, 'N/A') as business_type
             FROM appointments a
-            JOIN leads l ON a.lead_id = l.id
+            LEFT JOIN leads l ON a.lead_id = l.id
             ORDER BY a.created_at DESC
         `).all());
 
