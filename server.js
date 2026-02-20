@@ -42,4 +42,8 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`db connected: ${!!db}`);
+
+    // Iniciar el cron scheduler para recordatorios de WhatsApp
+    const { startReminderJob } = require('./services/reminderScheduler');
+    startReminderJob();
 });
