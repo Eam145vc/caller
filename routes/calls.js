@@ -45,9 +45,25 @@ router.post('/calls/test', async (req, res) => {
     try {
         console.log(`Initiating TEST call to ${phoneNumber} for ${businessName} (${businessType})...`);
 
+        let testLeadId = 'test';
+        try {
+            if (process.env.DATABASE_URL) {
+                // Postgres
+                const res = await db.query("INSERT INTO leads (name, phone, business_type, status) VALUES ($1, $2, $3, $4) RETURNING id", [businessName || 'Test Business', phoneNumber, businessType || 'Negocio', 'new']);
+                testLeadId = res.rows[0].id;
+            } else {
+                // SQLite
+                const info = db.prepare("INSERT INTO leads (name, phone, business_type, status) VALUES (?, ?, ?, ?)").run(businessName || 'Test Business', phoneNumber, businessType || 'Negocio', 'new');
+                testLeadId = info.lastInsertRowid;
+            }
+            console.log("Created Test Lead ID:", testLeadId);
+        } catch (e) {
+            console.error("Error creating test lead:", e);
+        }
+
         // Pass business info through query params to the webhook
         const queryParams = new URLSearchParams({
-            leadId: 'test',
+            leadId: testLeadId,
             bName: businessName || 'Mi Negocio',
             bType: businessType || 'Negocio'
         }).toString();
