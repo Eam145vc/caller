@@ -311,10 +311,13 @@ function processInputAudio(mulawBuffer) {
     const avgAmplitude = energySum / mulawBuffer.length;
 
     // Minimal Noise Gate: If the audio is just phone line static (amplitude < 150),
-    // we send pure digital silence to Gemini. This prevents the Gemini Server VAD
-    // from false-triggering on static and hesitating/interrupting itself.
+    // we heavily attenuate it instead of sending absolute zero. Absolute zero can crash
+    // or hang cloud VADs (Voice Activity Detectors) by breaking their noise floor calculation,
+    // leading to 10-second timeouts.
     if (avgAmplitude < 150) {
-        return Buffer.alloc(pcm16.length * 2); // Zeroed
+        for (let i = 0; i < pcm16.length; i++) {
+            pcm16[i] = Math.floor(pcm16[i] / 10);
+        }
     }
 
     return Buffer.from(pcm16.buffer);
