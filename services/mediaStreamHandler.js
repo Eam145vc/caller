@@ -162,8 +162,8 @@ module.exports = (connection) => {
                                 twilioWs.send(JSON.stringify({ event: 'clear', streamSid: streamSid }));
                             }
                         }
-                        if (message.serverContent && message.serverContent.toolCall) {
-                            const toolCall = message.serverContent.toolCall;
+                        if (message.toolCall) {
+                            const toolCall = message.toolCall;
                             const responses = [];
 
                             for (const call of toolCall.functionCalls) {
