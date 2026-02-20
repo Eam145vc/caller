@@ -20,14 +20,20 @@ if (process.env.DATABASE_URL) {
     db.prepare = (sql) => {
         return {
             get: async (...params) => {
-                const res = await db.query(sql.replace(/\?/g, (match, i) => `$${i + 1}`), params);
+                const querySql = sql.replace(/\?/g, (match, i) => `$${i + 1}`);
+                console.log("[DB DEBUG] get:", querySql, params);
+                const res = await db.query(querySql, params);
                 return res.rows[0];
             },
             run: async (...params) => {
-                return await db.query(sql.replace(/\?/g, (match, i) => `$${i + 1}`), params);
+                const querySql = sql.replace(/\?/g, (match, i) => `$${i + 1}`);
+                console.log("[DB DEBUG] run:", querySql, params);
+                return await db.query(querySql, params);
             },
             all: async (...params) => {
-                const res = await db.query(sql.replace(/\?/g, (match, i) => `$${i + 1}`), params);
+                const querySql = sql.replace(/\?/g, (match, i) => `$${i + 1}`);
+                console.log("[DB DEBUG] all:", querySql, params);
+                const res = await db.query(querySql, params);
                 return res.rows;
             }
         };

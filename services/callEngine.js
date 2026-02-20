@@ -7,7 +7,7 @@ const client = twilio(accountSid, authToken);
 
 async function initiateCall(leadId) {
     // Fetch lead details
-    const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId);
+    const lead = await Promise.resolve(db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId));
 
     if (!lead) {
         throw new Error("Lead not found");
@@ -35,8 +35,10 @@ async function initiateCall(leadId) {
         console.log(`Call initiated to ${lead.phone}. SID: ${call.sid}`);
 
         // Log call
-        db.prepare('INSERT INTO calls (lead_id, twilio_call_sid, outcome) VALUES (?, ?, ?)')
-            .run(leadId, call.sid, 'initiating');
+        await Promise.resolve(
+            db.prepare('INSERT INTO calls (lead_id, twilio_call_sid, outcome) VALUES (?, ?, ?)')
+                .run(leadId, call.sid, 'initiating')
+        );
 
         return call;
     } catch (error) {

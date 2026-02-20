@@ -242,13 +242,13 @@ module.exports = (connection) => {
 
                     if (leadId && leadId !== 'test' && leadId !== 'unknown') {
                         try {
-                            leadInfo = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId);
+                            leadInfo = await Promise.resolve(db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId));
                         } catch (e) {
                             console.error("Error fetching lead:", e);
                         }
                     }
 
-                    setupGemini(bName, bType);
+                    await setupGemini(bName, bType);
                     break;
 
                 case 'media':
