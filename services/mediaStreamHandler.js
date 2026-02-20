@@ -284,11 +284,27 @@ const MU_LAW_DECODE_TABLE = [
 
 function processInputAudio(mulawBuffer) {
     const pcm16 = new Int16Array(mulawBuffer.length * 2);
+    let energySum = 0;
+
     for (let i = 0; i < mulawBuffer.length; i++) {
         const sample = MU_LAW_DECODE_TABLE[mulawBuffer[i]];
+        energySum += Math.abs(sample);
+
         pcm16[i * 2] = sample;
-        pcm16[i * 2 + 1] = sample;
+        // Simple linear interpolation to slightly smooth the upsample mapping
+        const nextSample = (i < mulawBuffer.length - 1) ? MU_LAW_DECODE_TABLE[mulawBuffer[i + 1]] : sample;
+        pcm16[i * 2 + 1] = (sample + nextSample) / 2;
     }
+
+    const avgAmplitude = energySum / mulawBuffer.length;
+
+    // Minimal Noise Gate: If the audio is just phone line static (amplitude < 150),
+    // we send pure digital silence to Gemini. This prevents the Gemini Server VAD
+    // from false-triggering on static and hesitating/interrupting itself.
+    if (avgAmplitude < 150) {
+        return Buffer.alloc(pcm16.length * 2); // Zeroed
+    }
+
     return Buffer.from(pcm16.buffer);
 }
 
