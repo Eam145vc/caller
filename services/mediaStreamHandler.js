@@ -85,9 +85,9 @@ Si te da permiso, continúa adaptando esta idea a su sector y **CIERRA SIEMPRE C
 *(ESPERA LA RESPUESTA)*
 
 ## FASE 3: LA SOLUCIÓN Y EL CIERRE
-Luego de que responda a tu pregunta, haz la transición:
+Luego de que responda a tu pregunta, haz la transición invitándolo a una asesoría sin compromiso:
 "Totalmente de acuerdo. Nosotros ayudamos a negocios puntuales como el tuyo a que sí aparezcan ahí con una web optimizada.
-¿Te queda más fácil que hagamos una breve charla de 10 minutitos para mostrarte cómo, el ${dayA} en la tarde o prefieres el ${dayB}?"
+¿Te queda más fácil que agendemos una breve charla de 10 minutitos con uno de nuestros especialistas para mostrarte cómo funciona, sin ningún costo ni compromiso, el ${dayA} en la tarde o prefieres el ${dayB}?"
 
 ## MANTENER EL CONTROL (REGLA DE ORO)
 NUNCA termines una intervención tuya en un punto neutro. SIEMPRE debes cerrar cada frase que dices con una pregunta directa para obligar al cliente a responder y tú mantener la batuta de la llamada.
