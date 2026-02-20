@@ -64,6 +64,10 @@ Tu misión es agendar una asesoría gratuita de 15 minutos para mostrarle al due
 2. **Seguimiento (Follow-up)**: Si el cliente dice "llámame luego", INVOCA LA HERRAMIENTA \`schedule_follow_up(scheduled_at)\`.
 3. **No Interesado**: Si rechaza rotundamente, INVOCA LA HERRAMIENTA \`mark_not_interested()\`.
 
+## MANEJO DE RUIDO Y SILENCIO
+- **Ruido**: Ignora ruidos de fondo fuertes o estática de la línea telefónica. Si escuchas un ruido fuerte y crees que te interrumpieron pero no escuchaste palabras, asume que fue ruido y sigue hablando o retoma tu idea suavemente.
+- **Silencio**: Si el cliente se queda en silencio más de 5 segundos, retoma con algo como "¿Sigues por ahí?", "¿Me escuchas bien?" o repite la última pregunta amablemente.
+
 ## REGLAS CRÍTICAS DE CONVERSACIÓN
 1. **Ritmo y No Silencios**: Responde inmediatamente. NUNCA te quedes callada. Si la conversación termina, despídete formalmente, pero nunca dejes silencios muertos.
 2. **Respeto pero Adaptabilidad**: Si dicen que no tienen tiempo, propón amablemente llamar otro día. PERO si el cliente cambia de opinión de repente (ej. "no mentiras, cuéntame rapidito"), ADÁPTATE al instante, vuelve al ruedo con energía y retoma el guion.
@@ -102,6 +106,8 @@ module.exports = (connection) => {
     let leadInfo = null;
     let bName = null;
     let bType = null;
+    let lastActivityTime = Date.now();
+    let silenceInterval = null;
 
     async function setupGemini(customBName, customBType) {
         try {
@@ -156,14 +162,20 @@ module.exports = (connection) => {
                         console.log('✅ Gemini SDK Connection Open');
                     },
                     onmessage: (message) => {
+                        lastActivityTime = Date.now(); // Reset on any message from AI
+
                         if (message.serverContent && message.serverContent.interrupted) {
                             console.log("⚠️ AI Interrupted - Clearing Twilio Queue");
                             if (streamSid && twilioWs.readyState === WebSocket.OPEN) {
                                 twilioWs.send(JSON.stringify({ event: 'clear', streamSid: streamSid }));
                             }
                         }
-                        if (message.toolCall) {
-                            const toolCall = message.toolCall;
+
+                        // Robust tool call detection (sometimes it's at root, sometimes in serverContent)
+                        const toolCall = message.toolCall || (message.serverContent && message.serverContent.toolCall);
+
+                        if (toolCall) {
+                            console.log("📥 RECEIVED TOOL CALL:", JSON.stringify(toolCall));
                             const responses = [];
 
                             for (const call of toolCall.functionCalls) {
@@ -243,11 +255,29 @@ module.exports = (connection) => {
                         }
                     },
                     onerror: (err) => console.error("❌ Gemini SDK Error Callback:", err),
-                    onclose: (event) => console.log(`ℹ️ Gemini SDK Connection Closed. Code: ${event?.code}`)
+                    onclose: (event) => {
+                        console.log(`ℹ️ Gemini SDK Connection Closed. Code: ${event?.code}`);
+                        if (silenceInterval) clearInterval(silenceInterval);
+                    }
                 }
             });
 
             liveSession = session;
+
+            // Start Silence Monitor (Check every 2 seconds)
+            silenceInterval = setInterval(() => {
+                const idleTime = Date.now() - lastActivityTime;
+                if (idleTime > 12000) { // 12 seconds of total silence
+                    console.log("⏳ Silence detected, nudging AI...");
+                    lastActivityTime = Date.now();
+                    if (liveSession) {
+                        liveSession.sendClientContent({
+                            turns: [{ role: 'user', parts: [{ text: "(El cliente está en silencio, retoma la palabra amablemente para no perder la conexión)" }] }],
+                            turnComplete: true
+                        });
+                    }
+                }
+            }, 2000);
 
             console.log('✅ SDK Gemini Live Connected');
             const target = customBName || leadInfo?.name || "tu negocio";
@@ -289,6 +319,7 @@ module.exports = (connection) => {
 
                 case 'media':
                     if (liveSession) {
+                        lastActivityTime = Date.now(); // Reset on user audio
                         const mulawIn = Buffer.from(data.media.payload, 'base64');
                         const pcm16k = processInputAudio(mulawIn);
                         liveSession.sendRealtimeInput({
@@ -334,11 +365,9 @@ function processInputAudio(mulawBuffer) {
 
     const avgAmplitude = energySum / mulawBuffer.length;
 
-    // Minimal Noise Gate: If the audio is just phone line static (amplitude < 150),
-    // we heavily attenuate it instead of sending absolute zero. Absolute zero can crash
-    // or hang cloud VADs (Voice Activity Detectors) by breaking their noise floor calculation,
-    // leading to 10-second timeouts.
-    if (avgAmplitude < 150) {
+    // Higher Noise Gate: If the audio is just phone line static (amplitude < 200),
+    // we heavily attenuate it to prevent accidental AI interruptions.
+    if (avgAmplitude < 200) {
         for (let i = 0; i < pcm16.length; i++) {
             pcm16[i] = Math.floor(pcm16[i] / 10);
         }
